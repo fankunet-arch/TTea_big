@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： mhdlmskv3gjbpqv3.mysql.db
--- 生成日期： 2026-01-25 22:15:25
+-- 生成日期： 2026-01-25 22:30:05
 -- 服务器版本： 8.4.6-6
 -- PHP 版本： 8.1.33
 
@@ -22,27 +22,6 @@ SET time_zone = "+00:00";
 --
 CREATE DATABASE IF NOT EXISTS `mhdlmskv3gjbpqv3` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 USE `mhdlmskv3gjbpqv3`;
-
--- --------------------------------------------------------
-
---
--- 表的结构 `audit_logs`
---
-
-DROP TABLE IF EXISTS `audit_logs`;
-CREATE TABLE `audit_logs` (
-  `log_id` bigint UNSIGNED NOT NULL,
-  `action` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '动作 (e.g., pass.purchase, pass.review)',
-  `actor_user_id` int UNSIGNED NOT NULL COMMENT '操作人ID (kds_users或cpsys_users)',
-  `actor_type` enum('store_user','hq_user') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'store_user',
-  `target_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '目标类型 (e.g., member_pass, topup_order)',
-  `target_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '目标ID',
-  `data_json` json DEFAULT NULL COMMENT '详细数据',
-  `ip` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '操作IP',
-  `ua` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'User Agent',
-  `session_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '会话ID',
-  `created_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='B1.1: 审计日志表';
 
 -- --------------------------------------------------------
 
@@ -78,35 +57,6 @@ CREATE TABLE `cpsys_users` (
   `updated_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)) ON UPDATE CURRENT_TIMESTAMP(6),
   `deleted_at` datetime(6) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='后台系统用户表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `expsys_store_stock`
---
-
-DROP TABLE IF EXISTS `expsys_store_stock`;
-CREATE TABLE `expsys_store_stock` (
-  `id` int UNSIGNED NOT NULL,
-  `store_id` int UNSIGNED NOT NULL,
-  `material_id` int UNSIGNED NOT NULL,
-  `quantity` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `updated_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT 'UTC'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
-
---
--- 表的结构 `expsys_warehouse_stock`
---
-
-DROP TABLE IF EXISTS `expsys_warehouse_stock`;
-CREATE TABLE `expsys_warehouse_stock` (
-  `id` int UNSIGNED NOT NULL,
-  `material_id` int UNSIGNED NOT NULL,
-  `quantity` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `updated_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT 'UTC'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -1196,123 +1146,6 @@ CREATE TABLE `pos_vr_counters` (
 -- --------------------------------------------------------
 
 --
--- 表的结构 `sm_assignments`
---
-
-DROP TABLE IF EXISTS `sm_assignments`;
-CREATE TABLE `sm_assignments` (
-  `id` int UNSIGNED NOT NULL,
-  `priority` tinyint(1) NOT NULL COMMENT '优先级: 3=Special, 2=Holiday, 1=Weekly',
-  `condition_key` varchar(50) NOT NULL COMMENT '条件键: 日期(2025-12-01) / HOLIDAY / 星期(1-7)',
-  `strategy_id` int UNSIGNED NOT NULL COMMENT '关联策略ID',
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-规则指派表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_calendar`
---
-
-DROP TABLE IF EXISTS `sm_calendar`;
-CREATE TABLE `sm_calendar` (
-  `calendar_date` date NOT NULL COMMENT '具体日期',
-  `day_type` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1=节假日(Holiday), 0=调休工作日(Workday)',
-  `description` varchar(100) DEFAULT NULL COMMENT '备注(如:国庆节)'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-日历表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_devices`
---
-
-DROP TABLE IF EXISTS `sm_devices`;
-CREATE TABLE `sm_devices` (
-  `id` int UNSIGNED NOT NULL,
-  `shop_id` int DEFAULT NULL COMMENT '关联门店ID',
-  `device_name` varchar(100) DEFAULT NULL,
-  `mac_address` varchar(64) NOT NULL COMMENT '硬件唯一标识',
-  `current_version` varchar(64) DEFAULT NULL COMMENT '当前同步版本',
-  `last_heartbeat` datetime DEFAULT NULL,
-  `ip_address` varchar(45) DEFAULT NULL,
-  `status` tinyint(1) DEFAULT '1' COMMENT '设备状态: 0=未激活(待审核), 1=已激活(正常), 2=已禁用(拉黑)'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-设备终端表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_device_access_log`
---
-
-DROP TABLE IF EXISTS `sm_device_access_log`;
-CREATE TABLE `sm_device_access_log` (
-  `id` bigint UNSIGNED NOT NULL,
-  `mac_address` varchar(64) NOT NULL COMMENT '设备MAC地址',
-  `ip_address` varchar(45) DEFAULT NULL COMMENT '请求来源IP地址',
-  `endpoint` varchar(100) NOT NULL COMMENT 'API端点 (如: check_update, heartbeat)',
-  `access_result` enum('success','auth_failed','device_inactive','device_blocked','invalid_mac','invalid_json','db_error','other_error') NOT NULL COMMENT '访问结果',
-  `error_message` varchar(255) DEFAULT NULL COMMENT '错误信息详情',
-  `user_agent` varchar(500) DEFAULT NULL COMMENT 'User-Agent头',
-  `request_data` text COMMENT '请求数据(JSON格式，敏感信息已脱敏)',
-  `device_id` int UNSIGNED DEFAULT NULL COMMENT '关联的设备ID（如果设备已注册）',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '访问时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-设备访问日志表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_playlists`
---
-
-DROP TABLE IF EXISTS `sm_playlists`;
-CREATE TABLE `sm_playlists` (
-  `id` int UNSIGNED NOT NULL,
-  `name` varchar(100) NOT NULL COMMENT '歌单名称',
-  `play_mode` enum('sequence','random') DEFAULT 'sequence' COMMENT '播放模式: 顺序/随机',
-  `song_ids_json` json NOT NULL COMMENT 'JSON数组: [101, 102, 5]',
-  `created_by` int DEFAULT NULL COMMENT '创建人ID(关联admin)',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-歌单表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_songs`
---
-
-DROP TABLE IF EXISTS `sm_songs`;
-CREATE TABLE `sm_songs` (
-  `id` int UNSIGNED NOT NULL,
-  `title` varchar(255) NOT NULL COMMENT '歌曲标题',
-  `artist` varchar(100) DEFAULT 'Unknown' COMMENT '歌手',
-  `file_url` varchar(500) NOT NULL COMMENT '云端存储URL',
-  `file_md5` char(32) NOT NULL COMMENT '文件MD5指纹',
-  `file_size` int UNSIGNED NOT NULL DEFAULT '0' COMMENT '文件大小(Bytes)',
-  `duration` int UNSIGNED DEFAULT '0' COMMENT '时长(秒)',
-  `is_active` tinyint(1) DEFAULT '1' COMMENT '1=启用, 0=软删除',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-曲库表';
-
--- --------------------------------------------------------
-
---
--- 表的结构 `sm_strategies`
---
-
-DROP TABLE IF EXISTS `sm_strategies`;
-CREATE TABLE `sm_strategies` (
-  `id` int UNSIGNED NOT NULL,
-  `name` varchar(100) NOT NULL COMMENT '策略名称(如:标准工作日)',
-  `timeline_json` json NOT NULL COMMENT '时间轴配置 [{"start":"08:00","end":"12:00","playlist_id":1},...]',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='SoundMatrix-策略定义表';
-
--- --------------------------------------------------------
-
---
 -- 表的结构 `topup_orders`
 --
 
@@ -1335,38 +1168,9 @@ CREATE TABLE `topup_orders` (
   `review_note` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '审核备注 [cite: 33]'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='B1.1: 次卡售卡订单表 (VR非税)';
 
--- --------------------------------------------------------
-
---
--- 替换视图以便查看 `v_unauthorized_access_attempts`
--- （参见下面的实际视图）
---
-DROP VIEW IF EXISTS `v_unauthorized_access_attempts`;
-CREATE TABLE `v_unauthorized_access_attempts` (
-`id` bigint unsigned
-,`mac_address` varchar(64)
-,`ip_address` varchar(45)
-,`endpoint` varchar(100)
-,`access_result` enum('success','auth_failed','device_inactive','device_blocked','invalid_mac','invalid_json','db_error','other_error')
-,`error_message` varchar(255)
-,`created_at` timestamp
-,`device_name` varchar(100)
-,`shop_id` int
-,`device_status` tinyint(1)
-);
-
 --
 -- 转储表的索引
 --
-
---
--- 表的索引 `audit_logs`
---
-ALTER TABLE `audit_logs`
-  ADD PRIMARY KEY (`log_id`),
-  ADD KEY `idx_action` (`action`),
-  ADD KEY `idx_actor` (`actor_user_id`,`actor_type`),
-  ADD KEY `idx_target` (`target_type`,`target_id`);
 
 --
 -- 表的索引 `cpsys_roles`
@@ -1382,20 +1186,6 @@ ALTER TABLE `cpsys_users`
   ADD UNIQUE KEY `username` (`username`),
   ADD KEY `role_id` (`role_id`),
   ADD KEY `idx_cpsys_users_email` (`email`);
-
---
--- 表的索引 `expsys_store_stock`
---
-ALTER TABLE `expsys_store_stock`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `store_material` (`store_id`,`material_id`);
-
---
--- 表的索引 `expsys_warehouse_stock`
---
-ALTER TABLE `expsys_warehouse_stock`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `material_id` (`material_id`);
 
 --
 -- 表的索引 `kds_cups`
@@ -1838,55 +1628,6 @@ ALTER TABLE `pos_vr_counters`
   ADD UNIQUE KEY `uniq_prefix_series` (`vr_prefix`,`series`);
 
 --
--- 表的索引 `sm_assignments`
---
-ALTER TABLE `sm_assignments`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `idx_condition` (`priority`,`condition_key`);
-
---
--- 表的索引 `sm_calendar`
---
-ALTER TABLE `sm_calendar`
-  ADD PRIMARY KEY (`calendar_date`);
-
---
--- 表的索引 `sm_devices`
---
-ALTER TABLE `sm_devices`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `idx_mac` (`mac_address`);
-
---
--- 表的索引 `sm_device_access_log`
---
-ALTER TABLE `sm_device_access_log`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_mac` (`mac_address`),
-  ADD KEY `idx_access_result` (`access_result`),
-  ADD KEY `idx_created_at` (`created_at`),
-  ADD KEY `idx_device_id` (`device_id`);
-
---
--- 表的索引 `sm_playlists`
---
-ALTER TABLE `sm_playlists`
-  ADD PRIMARY KEY (`id`);
-
---
--- 表的索引 `sm_songs`
---
-ALTER TABLE `sm_songs`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `idx_md5` (`file_md5`) USING BTREE;
-
---
--- 表的索引 `sm_strategies`
---
-ALTER TABLE `sm_strategies`
-  ADD PRIMARY KEY (`id`);
-
---
 -- 表的索引 `topup_orders`
 --
 ALTER TABLE `topup_orders`
@@ -1903,12 +1644,6 @@ ALTER TABLE `topup_orders`
 --
 
 --
--- 使用表AUTO_INCREMENT `audit_logs`
---
-ALTER TABLE `audit_logs`
-  MODIFY `log_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
 -- 使用表AUTO_INCREMENT `cpsys_roles`
 --
 ALTER TABLE `cpsys_roles`
@@ -1918,18 +1653,6 @@ ALTER TABLE `cpsys_roles`
 -- 使用表AUTO_INCREMENT `cpsys_users`
 --
 ALTER TABLE `cpsys_users`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `expsys_store_stock`
---
-ALTER TABLE `expsys_store_stock`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `expsys_warehouse_stock`
---
-ALTER TABLE `expsys_warehouse_stock`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
@@ -2233,56 +1956,10 @@ ALTER TABLE `pos_vr_counters`
   MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
--- 使用表AUTO_INCREMENT `sm_assignments`
---
-ALTER TABLE `sm_assignments`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `sm_devices`
---
-ALTER TABLE `sm_devices`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `sm_device_access_log`
---
-ALTER TABLE `sm_device_access_log`
-  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `sm_playlists`
---
-ALTER TABLE `sm_playlists`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `sm_songs`
---
-ALTER TABLE `sm_songs`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- 使用表AUTO_INCREMENT `sm_strategies`
---
-ALTER TABLE `sm_strategies`
-  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
 -- 使用表AUTO_INCREMENT `topup_orders`
 --
 ALTER TABLE `topup_orders`
   MODIFY `topup_order_id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '售卡订单ID';
-
--- --------------------------------------------------------
-
---
--- 视图结构 `v_unauthorized_access_attempts`
---
-DROP TABLE IF EXISTS `v_unauthorized_access_attempts`;
-
-DROP VIEW IF EXISTS `v_unauthorized_access_attempts`;
-CREATE ALGORITHM=UNDEFINED DEFINER=`mhdlmskv3gjbpqv3`@`%` SQL SECURITY DEFINER VIEW `v_unauthorized_access_attempts`  AS SELECT `l`.`id` AS `id`, `l`.`mac_address` AS `mac_address`, `l`.`ip_address` AS `ip_address`, `l`.`endpoint` AS `endpoint`, `l`.`access_result` AS `access_result`, `l`.`error_message` AS `error_message`, `l`.`created_at` AS `created_at`, `d`.`device_name` AS `device_name`, `d`.`shop_id` AS `shop_id`, `d`.`status` AS `device_status` FROM (`sm_device_access_log` `l` left join `sm_devices` `d` on((`l`.`device_id` = `d`.`id`))) WHERE (`l`.`access_result` in ('auth_failed','device_inactive','device_blocked','invalid_mac')) ORDER BY `l`.`created_at` DESC ;
 
 --
 -- 限制导出的表

@@ -57,9 +57,9 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 function showKdsAlert(message, isError = false) {
     if (!kdsSimpleAlertModalInstance) {
+        // [AUDIT FIX 2026-01-25] 移除 alert() 回退，改为 console.error
         // 后备方案，以防模态框未正确加载
-        console.warn("KDS Alert Modal 未初始化，回退到原生 alert。");
-        alert(message); // 在套壳中这会失败，但在PC上至少能看到错误
+        console.error("KDS Alert Modal 未初始化，消息: " + message);
         return;
     }
 

@@ -40,11 +40,11 @@ window.onScanSuccess = function(code) {
  * @param {string} message 错误信息
  */
 window.onScanError = function(message) {
-    // 此时 showKdsAlert 可能还未加载，使用原生 alert 作为后备
+    // [AUDIT FIX 2026-01-25] 移除 alert() 回退，改为 console.error
     if (typeof showKdsAlert === 'function') {
         showKdsAlert("扫码失败: " + message, true);
     } else {
-        alert("扫码失败: " + message);
+        console.error("KDS Alert 未初始化，扫码失败: " + message);
     }
 };
 
@@ -152,15 +152,31 @@ window.onScanError = function(message) {
     if(!code) return;
     if($waiting.length) $waiting.text(lg()==='es'?'Esperando consulta…':'等待查询…').show();
     $.getJSON('api/sop_handler.php', {code: code}).done(function(res){
-      if(!res || res.status!=='success' || !res.data){ alert(lg()==='es'?'Error del servidor':'查询失败：服务器错误'); return; }
+      // [AUDIT FIX 2026-01-25] 替换 alert() 为 showKdsAlert()
+      if(!res || res.status!=='success' || !res.data){
+        if (typeof showKdsAlert === 'function') {
+          showKdsAlert(lg()==='es'?'Error del servidor':'查询失败：服务器错误', true);
+        } else {
+          console.error(lg()==='es'?'Error del servidor':'查询失败：服务器错误');
+        }
+        return;
+      }
       if($waiting.length) $waiting.hide();
       render({product:res.data.product||{}, recipe:res.data.recipe||[]});
-    }).fail(function(){ alert(lg()==='es'?'Error del servidor':'查询失败：服务器错误'); });
+    }).fail(function(){
+      // [AUDIT FIX 2026-01-25] 替换 alert() 为 showKdsAlert()
+      if (typeof showKdsAlert === 'function') {
+        showKdsAlert(lg()==='es'?'Error del servidor':'查询失败：服务器错误', true);
+      } else {
+        console.error(lg()==='es'?'Error del servidor':'查询失败：服务器错误');
+      }
+    });
   }
 
   bindTabs();
 
   // [V10] 绑定扫码按钮
+  // [AUDIT FIX 2026-01-25] 移除所有 alert() 回退
   $(document).on("click", "#btn-scan-qr", function() {
       if (window.AndroidBridge && typeof window.AndroidBridge.startScan === 'function') {
           try {
@@ -170,14 +186,14 @@ window.onScanError = function(message) {
               if (typeof showKdsAlert === 'function') {
                   showKdsAlert("调用扫码功能失败: " + e.message, true);
               } else {
-                  alert("调用扫码功能失败: " + e.message);
+                  console.error("调用扫码功能失败: " + e.message);
               }
           }
       } else {
           if (typeof showKdsAlert === 'function') {
               showKdsAlert("扫码功能不可用。请在 TopTea 安卓设备上使用。", true);
           } else {
-              alert("扫码功能不可用。请在 TopTea 安卓设备上使用。");
+              console.error("扫码功能不可用。请在 TopTea 安卓设备上使用。");
           }
       }
   });

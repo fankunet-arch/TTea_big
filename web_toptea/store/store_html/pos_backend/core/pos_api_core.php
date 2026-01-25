@@ -34,10 +34,19 @@ function run_api(array $registry, PDO $pdo): void {
         json_error("资源 '{$resource_name}' 未注册。", 404);
     }
 
-    // 权限校验（门店侧只校验是否登录）
+    // 权限校验
+    // [AUDIT FIX 2026-01-25] 添加角色权限验证逻辑
     $required_role = $config['auth_role'] ?? ROLE_STORE_USER;
     $logged_in     = isset($_SESSION['pos_user_id']);
     if (!$logged_in) json_error('未登录或会话失效。', 401);
+
+    // 获取用户角色并验证权限
+    $user_role = $_SESSION['pos_user_role'] ?? ROLE_STORE_USER;
+
+    // manager 角色拥有所有权限，staff 只能访问 staff 级别的资源
+    if ($user_role !== ROLE_STORE_MANAGER && $required_role === ROLE_STORE_MANAGER) {
+        json_error("权限不足，此操作需要经理权限。", 403);
+    }
 
     // 找处理器
     $handler_name = $config['custom_actions'][$action_name] ?? null;

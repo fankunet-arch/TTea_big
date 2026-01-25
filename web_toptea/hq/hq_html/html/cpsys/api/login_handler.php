@@ -43,14 +43,15 @@ $lockout_minutes = 15;
 
 try {
     // 检查IP是否被锁定
+    // [AUDIT FIX 2026-01-25] 修复参数绑定格式，统一使用位置参数
     $stmt_check = $pdo->prepare("
         SELECT COUNT(*) as attempts
         FROM audit_logs
         WHERE action = 'login.failed'
           AND ip = ?
-          AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL :minutes MINUTE)
+          AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)
     ");
-    $stmt_check->execute([$ip, ':minutes' => $lockout_minutes]);
+    $stmt_check->execute([$ip, $lockout_minutes]);
     $result = $stmt_check->fetch();
 
     if ($result['attempts'] >= $max_attempts) {

@@ -40,7 +40,8 @@ try {
         $user = $stmt_user->fetch();
 
         // 3. Verify password
-        if ($user && hash_equals($user['password_hash'], hash('sha256', $password))) {
+        // [AUDIT FIX 2026-01-25] 使用 password_verify() 替代不安全的 SHA256
+        if ($user && password_verify($password, $user['password_hash'])) {
             // --- Login Successful ---
             session_regenerate_id(true);
             $_SESSION['pos_logged_in'] = true;
@@ -98,10 +99,6 @@ try {
                 error_log("CRITICAL: Daily reset for store {$store['id']} failed: " . $e->getMessage());
             }
             // --- [估清 需求2] 结束 ---
-
-            // Redirect to POS main page
-            header('Location: ../index.php');
-
 
             // Redirect to POS main page
             header('Location: ../index.php');

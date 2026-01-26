@@ -60,10 +60,11 @@ window.onScanSuccess = function(code) {
  * @param {string} message 错误信息
  */
 window.onScanError = function(message) {
+    // [AUDIT FIX 2026-01-25] 移除 alert() 回退，改为 console.error
     if (typeof showKdsAlert === 'function') {
         showKdsAlert("扫码失败: " + message, true);
     } else {
-        alert("扫码失败: " + message);
+        console.error("KDS Alert 未初始化，扫码失败: " + message);
     }
 };
 

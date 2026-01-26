@@ -135,7 +135,15 @@ export async function printReceipt(data, template) {
             const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
             modal.show();
         } else {
-            alert("Print Preview:\n\n" + output);
+            // [AUDIT FIX 2026-01-25] 移除 alert()，改为 console.log 并尝试初始化模态框
+            console.log("Print Preview (模态框未初始化):\n\n" + output);
+            initializePrintSimulator();
+            const newPreviewModalEl = document.getElementById('printPreviewModal');
+            if (newPreviewModalEl) {
+                document.getElementById('printPreviewBody').textContent = output;
+                const modal = bootstrap.Modal.getOrCreateInstance(newPreviewModalEl);
+                modal.show();
+            }
         }
     }
 }

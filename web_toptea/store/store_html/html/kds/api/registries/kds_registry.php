@@ -26,16 +26,18 @@ if (!defined('ROLE_STORE_USER')) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Handlers: 迁移自 /pos/api/pos_print_handler.php (KDS 需要)     */
+/* Handlers: KDS打印模板 (效期标签)
+/* [2026-01-26 后台重构] 使用新的 kds_print_templates 表         */
 /* -------------------------------------------------------------------------- */
 function handle_print_get_templates(PDO $pdo, array $config, array $input_data): void {
-    // [GEMINI FIX 2] 使用 KDS 会话
+    // 使用 KDS 会话
     $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
     if ($store_id === 0) json_error('无法确定门店ID。', 401);
 
+    // [2026-01-26] 改用 kds_print_templates 表，仅支持效期标签
     $stmt = $pdo->prepare(
         "SELECT template_type, template_content, physical_size
-         FROM pos_print_templates 
+         FROM kds_print_templates
          WHERE (store_id = :store_id OR store_id IS NULL) AND is_active = 1
          ORDER BY store_id DESC"
     );
@@ -44,8 +46,10 @@ function handle_print_get_templates(PDO $pdo, array $config, array $input_data):
 
     $templates = [];
     foreach ($results as $row) {
-        if (!isset($templates[$row['template_type']])) {
-            $templates[$row['template_type']] = [
+        // 只加载效期标签相关模板
+        $type = $row['template_type'];
+        if (!isset($templates[$type])) {
+            $templates[$type] = [
                 'content' => json_decode($row['template_content'], true),
                 'size' => $row['physical_size']
             ];
@@ -319,6 +323,209 @@ function handle_kds_update_expiry_status(PDO $pdo, array $config, array $input_d
 
 
 /* -------------------------------------------------------------------------- */
+/* Handlers: 库存入库码 (2026-01-26 后台重构)                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 解析入库码
+ */
+function handle_kds_parse_import_code(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    if ($store_id === 0) json_error('无法确定门店ID。', 401);
+
+    $import_code = trim($input_data['import_code'] ?? '');
+    if (empty($import_code)) json_error('入库码不能为空', 400);
+
+    // 1. Base64解码
+    $decoded = base64_decode($import_code, true);
+    if ($decoded === false) json_error('入库码格式错误：无法解码', 400);
+
+    // 2. JSON解析
+    $payload = json_decode($decoded, true);
+    if (json_last_error() !== JSON_ERROR_NONE) json_error('入库码格式错误：JSON无效', 400);
+
+    // 3. 验证必要字段
+    $required = ['v', 'store', 'ref', 'date', 'items', 'checksum'];
+    foreach ($required as $field) {
+        if (!isset($payload[$field])) json_error("入库码格式错误：缺少字段 {$field}", 400);
+    }
+
+    // 4. 验证校验码
+    $checksum_data = $payload;
+    unset($checksum_data['checksum']);
+    $expected_checksum = substr(hash('sha256', json_encode($checksum_data)), 0, 8);
+    if ($payload['checksum'] !== $expected_checksum) json_error('入库码校验失败：数据可能被篡改', 400);
+
+    // 5. 验证门店
+    $store_code = $payload['store'];
+    $stmt = $pdo->prepare("SELECT id, store_code, store_name FROM kds_stores WHERE id = ? AND deleted_at IS NULL");
+    $stmt->execute([$store_id]);
+    $store = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$store || $store['store_code'] !== $store_code) {
+        json_error("入库码错误：此入库码是给门店 {$store_code} 的，与当前门店不匹配", 400);
+    }
+
+    // 6. 检查是否已导入
+    $code_hash = hash('sha256', $import_code);
+    $stmt = $pdo->prepare("SELECT id, imported_at FROM stock_import_logs WHERE import_code_hash = ?");
+    $stmt->execute([$code_hash]);
+    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($existing) {
+        json_error("此入库码已于 {$existing['imported_at']} 导入过，不能重复使用", 400);
+    }
+
+    // 7. 解析物料明细
+    $items = [];
+    $errors = [];
+
+    foreach ($payload['items'] as $idx => $item) {
+        $material_code = $item['code'] ?? '';
+
+        $stmt = $pdo->prepare("
+            SELECT m.id, m.material_code, m.base_unit_id,
+                   COALESCE(mt.material_name, CONCAT('M', m.material_code)) as material_name
+            FROM kds_materials m
+            LEFT JOIN kds_material_translations mt ON mt.material_id = m.id AND mt.language_code = 'zh-CN'
+            WHERE m.material_code = ? AND m.deleted_at IS NULL
+        ");
+        $stmt->execute([$material_code]);
+        $material = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$material) {
+            $errors[] = "第" . ($idx + 1) . "项：物料代码 {$material_code} 不存在";
+            continue;
+        }
+
+        $unit_code = $item['unit'] ?? '';
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.unit_code, COALESCE(ut.unit_name, u.unit_code) as unit_name
+            FROM kds_units u
+            LEFT JOIN kds_unit_translations ut ON ut.unit_id = u.id AND ut.language_code = 'zh-CN'
+            WHERE u.unit_code = ? AND u.deleted_at IS NULL
+        ");
+        $stmt->execute([$unit_code]);
+        $unit = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$unit) {
+            $errors[] = "第" . ($idx + 1) . "项：单位代码 {$unit_code} 不存在";
+            continue;
+        }
+
+        $items[] = [
+            'material_id' => $material['id'],
+            'material_code' => $material['material_code'],
+            'material_name' => $material['material_name'],
+            'quantity' => (float)$item['qty'],
+            'unit_id' => $unit['id'],
+            'unit_code' => $unit['unit_code'],
+            'unit_name' => $unit['unit_name'],
+            'batch_code' => $item['batch'] ?? null,
+            'shelf_life_date' => $item['shelf'] ?? null,
+        ];
+    }
+
+    if (!empty($errors)) json_error(implode("\n", $errors), 400);
+
+    json_ok([
+        'store_id' => $store['id'],
+        'store_code' => $store['store_code'],
+        'store_name' => $store['store_name'],
+        'mrs_reference' => $payload['ref'],
+        'shipment_date' => $payload['date'],
+        'items' => $items,
+        'code_hash' => $code_hash,
+        'raw_code' => $import_code,
+    ], '入库码解析成功');
+}
+
+/**
+ * 执行入库
+ */
+function handle_kds_execute_import(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $user_id = (int)($_SESSION['kds_user_id'] ?? 0);
+
+    $data_store_id = (int)($input_data['store_id'] ?? 0);
+    $mrs_reference = $input_data['mrs_reference'] ?? '';
+    $shipment_date = $input_data['shipment_date'] ?? '';
+    $items = $input_data['items'] ?? [];
+    $code_hash = $input_data['code_hash'] ?? '';
+    $raw_code = $input_data['raw_code'] ?? '';
+
+    if ($store_id !== $data_store_id) json_error('门店不匹配', 400);
+    if (empty($items) || empty($code_hash)) json_error('参数不完整', 400);
+
+    // 再次检查是否已导入
+    $stmt = $pdo->prepare("SELECT id FROM stock_import_logs WHERE import_code_hash = ?");
+    $stmt->execute([$code_hash]);
+    if ($stmt->fetch()) json_error('此入库码已导入过', 400);
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO stock_import_logs
+            (store_id, import_code_hash, mrs_reference, shipment_date, items_count, raw_code, imported_by, import_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'KDS')
+        ");
+        $stmt->execute([$store_id, $code_hash, $mrs_reference, $shipment_date, count($items), $raw_code, $user_id ?: null]);
+        $log_id = $pdo->lastInsertId();
+
+        $stmt_detail = $pdo->prepare("
+            INSERT INTO stock_import_details
+            (import_log_id, material_id, quantity, unit_id, batch_code, shelf_life_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+
+        $stmt_stock = $pdo->prepare("
+            INSERT INTO expsys_store_stock (store_id, material_id, quantity)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+        ");
+
+        foreach ($items as $item) {
+            $stmt_detail->execute([
+                $log_id,
+                $item['material_id'],
+                $item['quantity'],
+                $item['unit_id'],
+                $item['batch_code'] ?? null,
+                $item['shelf_life_date'] ?? null,
+            ]);
+
+            $stmt_stock->execute([$store_id, $item['material_id'], $item['quantity']]);
+        }
+
+        $pdo->commit();
+        json_ok(['import_log_id' => $log_id], '入库成功！共入库 ' . count($items) . ' 种物料');
+
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        json_error('入库失败: ' . $e->getMessage(), 500);
+    }
+}
+
+/**
+ * 获取最近入库记录
+ */
+function handle_kds_recent_imports(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $limit = min((int)($_GET['limit'] ?? 10), 50);
+
+    $stmt = $pdo->prepare("
+        SELECT id, mrs_reference, shipment_date, items_count, imported_at
+        FROM stock_import_logs
+        WHERE store_id = ?
+        ORDER BY imported_at DESC
+        LIMIT ?
+    ");
+    $stmt->execute([$store_id, $limit]);
+    json_ok($stmt->fetchAll(PDO::FETCH_ASSOC), '最近入库记录');
+}
+
+
+/* -------------------------------------------------------------------------- */
 /* 注册表*/
 /* -------------------------------------------------------------------------- */
 return [
@@ -354,6 +561,16 @@ return [
         'auth_role' => ROLE_STORE_USER, // KDS 角色
         'custom_actions' => [
             'get_materials' => 'handle_kds_get_preppable', // 迁移自 kds/api/get_preppable_materials.php
+        ],
+    ],
+
+    // KDS: Stock Import (2026-01-26 后台重构)
+    'stock' => [
+        'auth_role' => ROLE_STORE_USER,
+        'custom_actions' => [
+            'parse_import_code' => 'handle_kds_parse_import_code',
+            'execute_import' => 'handle_kds_execute_import',
+            'recent_imports' => 'handle_kds_recent_imports',
         ],
     ],
 ];

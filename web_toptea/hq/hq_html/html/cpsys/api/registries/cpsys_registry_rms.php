@@ -47,14 +47,7 @@ return [
         ],
     ],
 
-    'stock' => [
-        'table' => 'expsys_warehouse_stock', // 占位
-        'auth_role' => ROLE_SUPER_ADMIN,
-        'custom_actions' => [
-            'add_warehouse_stock' => 'cprms_stock_actions',
-            'allocate_to_store'   => 'cprms_stock_actions',
-        ],
-    ],
+    // [2026-01-26 后台重构] 移除总仓库存 'stock' 资源，改用 cpsys_registry_stock.php
 
     'rms_global_rules' => [
         'table' => 'kds_global_adjustment_rules',
@@ -94,14 +87,6 @@ return [
         ],
     ],
 
-    // [R1] 新增 rms_tags 资源
-    'rms_tags' => [
-        'table' => 'pos_tags', // 占位
-        'pk' => 'tag_id',
-        'auth_role' => ROLE_PRODUCT_MANAGER, // POS/KDS 也可访问 (只读)
-        'custom_actions' => [
-            'get_list' => 'cprms_tags_get_list',
-        ],
-    ],
+    // [2026-01-26 后台重构] 移除 rms_tags 资源（POS标签表已删除）
 
 ];

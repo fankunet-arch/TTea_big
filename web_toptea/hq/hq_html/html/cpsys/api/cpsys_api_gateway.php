@@ -24,19 +24,20 @@ require_once APP_PATH . '/helpers/http_json_helper.php';
 require_once APP_PATH . '/core/api_core.php';
 
 // 4. 加载所有资源注册表
+// [2026-01-26 后台重构] 移除 POS 相关的 BMS registry
 $registry_base = require_once __DIR__ . '/registries/cpsys_registry_base.php';
-$registry_bms = require_once __DIR__ . '/registries/cpsys_registry_bms.php';
 $registry_rms = require_once __DIR__ . '/registries/cpsys_registry_rms.php';
 $registry_ext = require_once __DIR__ . '/registries/cpsys_registry_ext.php';
 $registry_kds = require_once __DIR__ . '/registries/cpsys_registry_kds.php';
+$registry_stock = require_once __DIR__ . '/registries/cpsys_registry_stock.php';
 
 // 5. 合并注册表
 $full_registry = array_merge(
     $registry_base,
-    $registry_bms,
     $registry_rms,
     $registry_ext,
-    $registry_kds
+    $registry_kds,
+    $registry_stock
 );
 
 // 6. 运行引擎

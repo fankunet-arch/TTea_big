@@ -12,9 +12,10 @@ header("Pragma: no-cache");
 header("Expires: 0");
 // --- END: DEFINITIVE CACHE FIX ---
 
-require_once realpath(__DIR__ . '/../../kds/core/kds_auth_core.php');
+// [KDS ARCHITECTURE REFACTOR] 统一使用 kds_backend 目录
+require_once realpath(__DIR__ . '/../../kds_backend/core/kds_auth_core.php');
 header('Content-Type: text/html; charset=utf-8');
-require_once realpath(__DIR__ . '/../../kds/core/config.php');
+require_once realpath(__DIR__ . '/../../kds_backend/core/config.php');
 
 $page_title = '物料制备 - KDS';
 $content_view = KDS_APP_PATH . '/views/kds/prep_view.php';

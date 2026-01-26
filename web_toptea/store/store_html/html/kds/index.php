@@ -5,13 +5,14 @@
  * Engineer: Gemini | Date: 2025-10-23
  */
 
+// [KDS ARCHITECTURE REFACTOR] 统一使用 kds_backend 目录
 // This MUST be the first include. It checks if the user is logged in for the KDS.
-require_once realpath(__DIR__ . '/../../kds/core/kds_auth_core.php');
+require_once realpath(__DIR__ . '/../../kds_backend/core/kds_auth_core.php');
 
 header('Content-Type: text/html; charset=utf-8');
 
 // Load the core configuration for the KDS.
-require_once realpath(__DIR__ . '/../../kds/core/config.php');
+require_once realpath(__DIR__ . '/../../kds_backend/core/config.php');
 
 $page = $_GET['page'] ?? 'sop'; // Default page is the Standard Operating Procedure view.
 

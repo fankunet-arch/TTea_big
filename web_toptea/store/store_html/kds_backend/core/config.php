@@ -2,7 +2,11 @@
 /**
  * Toptea KDS - Core Configuration File
  * Engineer: Gemini | Date: 2025-10-24
- * Revision: 3.0 (Sync with HQ Error Logging)
+ * Revision: 4.0 (Architecture Refactor - Unified to kds_backend)
+ *
+ * [KDS ARCHITECTURE REFACTOR 2026-01-25]
+ * 此文件从 kds/core/config.php 迁移到 kds_backend/core/config.php
+ * 统一KDS后端目录结构，与POS架构保持一致
  */
 
 // --- [SECURITY FIX V2.0] ---
@@ -26,11 +30,19 @@ $db_char = 'utf8mb4';
 // --- Application Settings ---
 define('KDS_BASE_URL', '/kds/'); // Relative base URL for the KDS app
 
-// --- Directory Paths ---
-define('KDS_ROOT_PATH', dirname(__DIR__));
-define('KDS_APP_PATH', KDS_ROOT_PATH . '/app');
-define('KDS_CORE_PATH', KDS_ROOT_PATH . '/core');
-define('KDS_PUBLIC_PATH', KDS_ROOT_PATH . '/html');
+// --- Directory Paths (Updated for kds_backend) ---
+define('KDS_BACKEND_PATH', dirname(__DIR__));          // kds_backend/
+define('KDS_CORE_PATH', KDS_BACKEND_PATH . '/core');   // kds_backend/core/
+define('KDS_HELPERS_PATH', KDS_BACKEND_PATH . '/helpers'); // kds_backend/helpers/
+
+// --- View Paths (视图已迁移到 kds_backend/views) ---
+// [REFACTOR 2026-01-26] 视图迁移到 kds_backend/views，与POS结构一致
+define('KDS_VIEWS_PATH', KDS_BACKEND_PATH . '/views'); // kds_backend/views/
+
+// --- Application Default Timezone (for datetime calculations) ---
+if (!defined('APP_DEFAULT_TIMEZONE')) {
+    define('APP_DEFAULT_TIMEZONE', 'Europe/Madrid');
+}
 
 // --- Database Connection (PDO) ---
 $dsn = "mysql:host=$db_host;dbname=$db_name;charset=$db_char";
@@ -42,7 +54,7 @@ $options = [
 
 try {
     $pdo = new PDO($dsn, $db_user, $db_pass, $options);
-    
+
     // [A1 UTC SYNC] Set connection timezone to UTC
     $pdo->exec("SET time_zone='+00:00'");
 

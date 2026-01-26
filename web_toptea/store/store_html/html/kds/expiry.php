@@ -12,16 +12,18 @@ header("Pragma: no-cache");
 header("Expires: 0");
 // --- END: DEFINITIVE CACHE FIX ---
 
-require_once realpath(__DIR__ . '/../../kds/core/kds_auth_core.php');
+// [KDS ARCHITECTURE REFACTOR] 统一使用 kds_backend 目录
+require_once realpath(__DIR__ . '/../../kds_backend/core/kds_auth_core.php');
 header('Content-Type: text/html; charset=utf-8');
-require_once realpath(__DIR__ . '/../../kds/core/config.php');
+require_once realpath(__DIR__ . '/../../kds_backend/core/config.php');
 
 $page_title = '效期追踪 - KDS';
-$content_view = KDS_APP_PATH . '/views/kds/expiry_view.php';
+// [REFACTOR 2026-01-26] 使用 KDS_VIEWS_PATH
+$content_view = KDS_VIEWS_PATH . '/expiry_view.php';
 $page_js = 'kds_expiry.js';
 
 if (!file_exists($content_view)) {
     die("Critical Error: View file not found at path: " . htmlspecialchars($content_view));
 }
 
-include KDS_APP_PATH . '/views/kds/layouts/main.php';
+include KDS_VIEWS_PATH . '/layouts/main.php';

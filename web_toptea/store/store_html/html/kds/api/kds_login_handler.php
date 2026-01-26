@@ -6,7 +6,8 @@
  */
 
 @session_start();
-require_once realpath(__DIR__ . '/../../../kds/core/config.php');
+// [KDS ARCHITECTURE REFACTOR] 统一使用 kds_backend 目录
+require_once realpath(__DIR__ . '/../../../kds_backend/core/config.php');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ../login.php');

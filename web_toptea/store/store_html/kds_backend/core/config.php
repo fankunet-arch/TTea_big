@@ -35,10 +35,9 @@ define('KDS_BACKEND_PATH', dirname(__DIR__));          // kds_backend/
 define('KDS_CORE_PATH', KDS_BACKEND_PATH . '/core');   // kds_backend/core/
 define('KDS_HELPERS_PATH', KDS_BACKEND_PATH . '/helpers'); // kds_backend/helpers/
 
-// --- View Paths (视图仍在 kds/app/views 目录) ---
-// 视图层保留在原位置，符合前后端分离原则
-define('KDS_VIEWS_PATH', dirname(KDS_BACKEND_PATH) . '/kds/app/views'); // kds/app/views/
-define('KDS_APP_PATH', dirname(KDS_BACKEND_PATH) . '/kds/app');         // 兼容旧代码
+// --- View Paths (视图已迁移到 kds_backend/views) ---
+// [REFACTOR 2026-01-26] 视图迁移到 kds_backend/views，与POS结构一致
+define('KDS_VIEWS_PATH', KDS_BACKEND_PATH . '/views'); // kds_backend/views/
 
 // --- Application Default Timezone (for datetime calculations) ---
 if (!defined('APP_DEFAULT_TIMEZONE')) {

@@ -18,11 +18,12 @@ header('Content-Type: text/html; charset=utf-8');
 require_once realpath(__DIR__ . '/../../kds_backend/core/config.php');
 
 $page_title = '物料制备 - KDS';
-$content_view = KDS_APP_PATH . '/views/kds/prep_view.php';
+// [REFACTOR 2026-01-26] 使用 KDS_VIEWS_PATH
+$content_view = KDS_VIEWS_PATH . '/prep_view.php';
 $page_js = 'kds_prep.js';
 
 if (!file_exists($content_view)) {
     die("Critical Error: View file not found at path: " . htmlspecialchars($content_view));
 }
 
-include KDS_APP_PATH . '/views/kds/layouts/main.php';
+include KDS_VIEWS_PATH . '/layouts/main.php';

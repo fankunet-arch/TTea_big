@@ -19,7 +19,8 @@ $page = $_GET['page'] ?? 'sop'; // Default page is the Standard Operating Proced
 switch ($page) {
     case 'sop':
         $page_title = '制茶助手 - SOP';
-        $content_view = KDS_APP_PATH . '/views/kds/sop_view.php';
+        // [REFACTOR 2026-01-26] 使用 KDS_VIEWS_PATH
+        $content_view = KDS_VIEWS_PATH . '/sop_view.php';
         $page_js = 'kds_sop.js';
         break;
 
@@ -34,4 +35,4 @@ if (!file_exists($content_view)) {
 }
 
 // Load the main KDS layout file, which will in turn include the content view.
-include KDS_APP_PATH . '/views/kds/layouts/main.php';
+include KDS_VIEWS_PATH . '/layouts/main.php';

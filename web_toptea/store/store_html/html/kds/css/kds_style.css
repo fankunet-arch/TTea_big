@@ -160,6 +160,75 @@ body{
 .kds-logout-btn:hover{color: #fff;background-color: var(--danger-500);border-color: var(--danger-500);}
 .kds-logout-btn .bi{font-size: 1.1rem;opacity: 1;}
 
+/* --- [FIX 2026-01-27] KDS User Dropdown Styles --- */
+.kds-user-dropdown { position: relative; }
+.kds-user-toggle {
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+}
+.kds-user-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.kds-user-toggle .bi-person-circle {
+  font-size: 1.4rem;
+  opacity: 0.9;
+}
+.kds-user-toggle .bi-caret-down-fill {
+  opacity: 0.7;
+}
+.kds-user-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.kds-user-menu {
+  min-width: 200px;
+  padding: 0.75rem 0;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: #374151;
+}
+.kds-user-info-item {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  gap: 0.5rem;
+}
+.kds-info-label {
+  color: #9CA3AF;
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-width: 45px;
+}
+.kds-info-value {
+  color: #F3F4F6;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.kds-user-menu .dropdown-divider {
+  border-color: rgba(255, 255, 255, 0.1);
+  margin: 0.5rem 0;
+}
+.kds-change-pwd-btn {
+  color: #D1D5DB !important;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  transition: background-color 0.15s ease;
+}
+.kds-change-pwd-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+.kds-change-pwd-btn .bi {
+  opacity: 0.8;
+}
+/* --- End KDS User Dropdown Styles --- */
+
 /* --- Prep Page Styles --- */
 .prep-header {background-color: var(--surface);padding: 10px 20px;display: flex;justify-content: space-between;align-items: center;border-bottom: 1px solid var(--line);box-shadow: var(--shadow-md); z-index: 10;
   padding-top: calc(10px + env(safe-area-inset-top));

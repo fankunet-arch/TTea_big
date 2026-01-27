@@ -30,6 +30,8 @@ $registry_rms = require_once __DIR__ . '/registries/cpsys_registry_rms.php';
 $registry_ext = require_once __DIR__ . '/registries/cpsys_registry_ext.php';
 $registry_kds = require_once __DIR__ . '/registries/cpsys_registry_kds.php';
 $registry_stock = require_once __DIR__ . '/registries/cpsys_registry_stock.php';
+// [2026-01-27 FIX] 添加缺失的 inspection registry
+$registry_inspection = require_once __DIR__ . '/registries/cpsys_registry_inspection.php';
 
 // 5. 合并注册表
 $full_registry = array_merge(
@@ -37,7 +39,8 @@ $full_registry = array_merge(
     $registry_rms,
     $registry_ext,
     $registry_kds,
-    $registry_stock
+    $registry_stock,
+    $registry_inspection
 );
 
 // 6. 运行引擎

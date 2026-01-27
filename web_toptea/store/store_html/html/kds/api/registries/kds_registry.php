@@ -30,28 +30,24 @@ if (!defined('ROLE_STORE_USER')) {
 /* [2026-01-26 后台重构] 使用新的 kds_print_templates 表         */
 /* -------------------------------------------------------------------------- */
 function handle_print_get_templates(PDO $pdo, array $config, array $input_data): void {
-    // 使用 KDS 会话
-    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
-    if ($store_id === 0) json_error('无法确定门店ID。', 401);
-
-    // [2026-01-26] 改用 kds_print_templates 表，仅支持效期标签
+    // [2026-01-27 FIX] 修正SQL查询以匹配实际表结构
+    // kds_print_templates 表使用 template_code 作为模板标识，
+    // paper_width/paper_height 作为尺寸，没有 store_id 字段
     $stmt = $pdo->prepare(
-        "SELECT template_type, template_content, physical_size
+        "SELECT template_code, template_content, paper_width, paper_height
          FROM kds_print_templates
-         WHERE (store_id = :store_id OR store_id IS NULL) AND is_active = 1
-         ORDER BY store_id DESC"
+         WHERE is_active = 1"
     );
-    $stmt->execute([':store_id' => $store_id]);
+    $stmt->execute();
     $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $templates = [];
     foreach ($results as $row) {
-        // 只加载效期标签相关模板
-        $type = $row['template_type'];
-        if (!isset($templates[$type])) {
-            $templates[$type] = [
+        $code = $row['template_code'];
+        if (!isset($templates[$code])) {
+            $templates[$code] = [
                 'content' => json_decode($row['template_content'], true),
-                'size' => $row['physical_size']
+                'size' => $row['paper_width'] . 'x' . $row['paper_height']
             ];
         }
     }

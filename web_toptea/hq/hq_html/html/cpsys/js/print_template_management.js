@@ -1,7 +1,12 @@
 /**
  * Toptea HQ - KDS 打印模板管理 JS
- * Version: 1.0
- * Date: 2026-01-26
+ * Version: 1.0.1
+ * Date: 2026-01-27
+ *
+ * [AUDIT FIX 2026-01-27] Naming Convention Documentation:
+ * - JavaScript variables use camelCase (e.g., templateCode, paperWidth) per JS conventions
+ * - API payloads use snake_case keys (e.g., template_code, paper_width) to match backend/DB
+ * - Example: const templateCode = ... -> data.template_code = templateCode
  */
 
 const API_BASE = 'api/cpsys_api_gateway.php';

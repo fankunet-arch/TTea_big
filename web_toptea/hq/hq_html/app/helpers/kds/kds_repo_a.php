@@ -262,13 +262,17 @@ function getAllRedemptionRules(PDO $pdo): array {
     }
 }
 
+/**
+ * [AUDIT FIX 2026-01-27] Updated to use kds_print_templates table
+ * The old pos_print_templates table has been removed from the schema.
+ */
 function getAllPrintTemplates(PDO $pdo): array {
     try {
-        $stmt = $pdo->query("SELECT * FROM pos_print_templates ORDER BY template_type, template_name ASC");
+        $stmt = $pdo->query("SELECT * FROM kds_print_templates WHERE is_active = 1 ORDER BY template_type, template_name ASC");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         if ($e->getCode() === '42S02') {
-            error_log('Warning: pos_print_templates missing: '.$e->getMessage());
+            error_log('Warning: kds_print_templates missing: '.$e->getMessage());
             return [];
         }
         throw $e;

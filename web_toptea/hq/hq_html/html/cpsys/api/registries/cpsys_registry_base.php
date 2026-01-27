@@ -65,12 +65,10 @@ return [
         ],
     ],
 
-    'print_templates' => [
-        'table' => 'pos_print_templates', 'pk' => 'id', 'soft_delete_col' => null, 'auth_role' => ROLE_SUPER_ADMIN,
-        'custom_actions' => [
-            'get' => 'handle_template_get', 'save' => 'handle_template_save', 'delete' => 'handle_template_delete',
-        ],
-    ],
+    // [AUDIT FIX 2026-01-27] REMOVED: print_templates entry
+    // Reason: Registry Key Collision - this key was duplicated in cpsys_registry_stock.php
+    // Resolution: Use the implementation in cpsys_registry_stock.php which references the
+    // correct table 'kds_print_templates' (the 'pos_print_templates' table does not exist)
 
     // --- 字典 Dictionaries ---
     'cups' => [

@@ -1,7 +1,12 @@
 /**
  * Toptea HQ - Inspection Template Management
- * Version: 1.0
+ * Version: 1.0.1
  * Date: 2026-01-27
+ *
+ * [AUDIT FIX 2026-01-27] Naming Convention Documentation:
+ * - JavaScript variables use camelCase (e.g., storeId, templateCode) per JS conventions
+ * - API payloads use snake_case keys (e.g., store_ids, template_code) to match backend/DB
+ * - Example: storeIds.push() -> data.store_ids = storeIds
  */
 
 const API_BASE = 'api/cpsys_api_gateway.php';

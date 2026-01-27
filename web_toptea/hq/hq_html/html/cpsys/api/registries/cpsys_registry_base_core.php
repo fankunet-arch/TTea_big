@@ -374,6 +374,14 @@ function handle_kds_user_save(PDO $pdo, array $config, array $input_data): void 
     $display    = trim((string)($data['display_name'] ?? ''));
     $is_active  = (int)($data['is_active'] ?? 0);
     $password   = (string)($data['password'] ?? '');
+    // [FIX 2026-01-27] 添加角色字段处理
+    $role       = trim((string)($data['role'] ?? 'staff'));
+
+    // 验证角色值
+    $valid_roles = ['staff', 'manager'];
+    if (!in_array($role, $valid_roles, true)) {
+        $role = 'staff';
+    }
 
     if ($store_id <= 0 || $username === '') {
         json_error('用户名和门店ID不能为空。', 400);
@@ -386,11 +394,13 @@ function handle_kds_user_save(PDO $pdo, array $config, array $input_data): void 
     try {
         if ($id > 0) {
             // 更新：仅当传了新密码才更新 password_hash
+            // [FIX 2026-01-27] 添加角色字段
             $params = [
                 ':store_id'     => $store_id,
                 ':id'           => $id,
                 ':display_name' => $display,
                 ':is_active'    => $is_active,
+                ':role'         => $role,
             ];
 
             if ($password !== '') {
@@ -399,12 +409,14 @@ function handle_kds_user_save(PDO $pdo, array $config, array $input_data): void 
                 $sql = "UPDATE kds_users
                            SET display_name = :display_name,
                                is_active    = :is_active,
+                               role         = :role,
                                password_hash = :password_hash
                          WHERE id = :id AND store_id = :store_id";
             } else {
                 $sql = "UPDATE kds_users
                            SET display_name = :display_name,
-                               is_active    = :is_active
+                               is_active    = :is_active,
+                               role         = :role
                          WHERE id = :id AND store_id = :store_id";
             }
 
@@ -429,18 +441,20 @@ function handle_kds_user_save(PDO $pdo, array $config, array $input_data): void 
                 json_error('用户名 \"' . htmlspecialchars($username) . '\" 在此门店已被使用。', 409);
             }
 
+            // [FIX 2026-01-27] 添加角色字段
             $params = [
                 ':store_id'     => $store_id,
                 ':username'     => $username,
                 ':display_name' => $display,
                 ':is_active'    => $is_active,
+                ':role'         => $role,
                 // [SECURITY FIX 2025-11-17] Use secure Bcrypt hashing instead of SHA256
                 ':password_hash'=> password_hash($password, PASSWORD_BCRYPT),
             ];
 
             $sql = "INSERT INTO kds_users
-                        (store_id, username, display_name, is_active, password_hash)
-                    VALUES (:store_id, :username, :display_name, :is_active, :password_hash)";
+                        (store_id, username, display_name, is_active, role, password_hash)
+                    VALUES (:store_id, :username, :display_name, :is_active, :role, :password_hash)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
 

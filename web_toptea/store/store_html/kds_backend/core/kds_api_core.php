@@ -56,17 +56,18 @@ function run_api(array $registry, PDO $pdo): void {
     }
     
     // 获取 KDS 角色
-    $user_role = $_SESSION['kds_user_role'] ?? null;
+    // [FIX 2026-01-27] 统一使用 kds_role 变量名（与 kds_login_handler.php 保持一致）
+    $user_role = $_SESSION['kds_role'] ?? null;
     $user_id   = (int)($_SESSION['kds_user_id'] ?? 0);
-    
-    // 修复 KDS 登录处理器未设置角色的问题 (从 kds_login_handler.php 复制逻辑)
+
+    // 如果会话中没有角色信息，从数据库获取并缓存
     if ($user_role === null && $user_id > 0) {
         try {
             $stmt = $pdo->prepare("SELECT role FROM kds_users WHERE id = ?");
             $stmt->execute([$user_id]);
             $user_role_from_db = $stmt->fetchColumn();
             if ($user_role_from_db) {
-                $_SESSION['kds_user_role'] = $user_role_from_db; // 缓存角色到会话
+                $_SESSION['kds_role'] = $user_role_from_db; // 缓存角色到会话
                 $user_role = $user_role_from_db;
             }
         } catch (Throwable $e) {

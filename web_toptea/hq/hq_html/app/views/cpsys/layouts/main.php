@@ -24,6 +24,10 @@ $stockPages = [
     'store_stock_view', 'stock_import', 'expiry_management'
 ];
 
+$inspectionPages = [
+    'inspection_template', 'inspection_report'
+];
+
 $systemPages = [
     'user_management', 'store_management', 'kds_user_management',
     'print_template_management', 'kds_sop_rules'
@@ -111,6 +115,25 @@ $systemPages = [
                         </ul>
                     </div>
                 </li>
+
+                <!-- 门店检查 (2026-01-27) -->
+                <?php if (check_role(ROLE_ADMIN)): ?>
+                <li class="nav-item">
+                    <a class="nav-link collapsed <?php echo (in_array($page, $inspectionPages)) ? 'active' : ''; ?>" href="#" data-bs-toggle="collapse" data-bs-target="#inspection-submenu" aria-expanded="<?php echo (in_array($page, $inspectionPages)) ? 'true' : 'false'; ?>">
+                        <i class="bi bi-clipboard-check me-2"></i>门店检查
+                    </a>
+                    <div class="collapse <?php echo (in_array($page, $inspectionPages)) ? 'show' : ''; ?>" id="inspection-submenu">
+                        <ul class="nav flex-column ps-4">
+                            <li class="nav-item">
+                                <a class="nav-link <?php echo ($page === 'inspection_template') ? 'active' : ''; ?>" href="index.php?page=inspection_template">检查项目</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link <?php echo ($page === 'inspection_report') ? 'active' : ''; ?>" href="index.php?page=inspection_report">完成报表</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                <?php endif; ?>
 
                 <!-- 系统设置 -->
                 <?php if (check_role(ROLE_ADMIN)): ?>

@@ -198,6 +198,25 @@ try {
             break;
 
         // ============================================================
+        // 门店检查管理 (2026-01-27)
+        // ============================================================
+        case 'inspection_template':
+            check_role(ROLE_ADMIN);
+            $page_title = '检查项目管理';
+            $js_files[] = 'inspection_template.js';
+            $data['stores'] = getAllStores($pdo);
+            $view_path = realpath(__DIR__ . '/../../app/views/cpsys/inspection_template_view.php');
+            break;
+
+        case 'inspection_report':
+            check_role(ROLE_ADMIN);
+            $page_title = '检查完成报表';
+            $js_files[] = 'inspection_report.js';
+            $data['stores'] = getAllStores($pdo);
+            $view_path = realpath(__DIR__ . '/../../app/views/cpsys/inspection_report_view.php');
+            break;
+
+        // ============================================================
         // KDS / 出品系统
         // ============================================================
         case 'kds_sop_rules':

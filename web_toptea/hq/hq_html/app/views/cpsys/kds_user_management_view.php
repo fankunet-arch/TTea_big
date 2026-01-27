@@ -72,6 +72,14 @@
                 <label for="display_name" class="form-label">显示名称 <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="display_name" name="display_name" required>
             </div>
+            <div class="mb-3">
+                <label for="role" class="form-label">角色 <span class="text-danger">*</span></label>
+                <select class="form-select" id="role" name="role" required>
+                    <option value="staff">员工 (staff)</option>
+                    <option value="manager">店长 (manager)</option>
+                </select>
+                <div class="form-text">店长可以访问检查清单等管理功能。</div>
+            </div>
             <hr>
             <div class="mb-3">
                 <label for="password" class="form-label">新密码</label>

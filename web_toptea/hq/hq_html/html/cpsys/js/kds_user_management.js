@@ -45,6 +45,8 @@ $(document).ready(function() {
                     const user = response.data;
                     usernameInput.val(user.username);
                     $('#display_name').val(user.display_name);
+                    // [FIX 2026-01-27] 加载角色字段
+                    $('#role').val(user.role || 'staff');
                     $('#is_active').prop('checked', user.is_active == 1);
                 } else { alert('获取数据失败: ' + response.message); dataDrawer.hide(); }
             },
@@ -63,6 +65,8 @@ $(document).ready(function() {
             store_id: $('#store-id').val(), // Important: pass the store context
             username: usernameInput.val(),
             display_name: $('#display_name').val(),
+            // [FIX 2026-01-27] 添加角色字段
+            role: $('#role').val(),
             password: $('#password').val(),
             is_active: $('#is_active').is(':checked') ? 1 : 0
         };

@@ -43,9 +43,41 @@
             <span class="lang-flag active" data-lang="zh-CN" role="button" tabindex="0"><svg class="flag" viewBox="0 0 30 20"><rect fill="#DE2910" height="20" width="30"></rect><text fill="#FFDE00" font-size="8.5" x="6" y="8">★</text><text fill="#FFDE00" font-size="3.8" x="12.5" y="4.5">★</text><text fill="#FFDE00" font-size="3.8" x="14.5" y="8">★</text><text fill="#FFDE00" font-size="3.8" x="12.5" y="11.5">★</text><text fill="#FFDE00" font-size="3.8" x="9.8" y="9.5">★</text></svg></span>
             <span class="lang-flag" data-lang="es-ES" role="button" tabindex="0"><svg class="flag" viewBox="0 0 30 20"><rect fill="#AA151B" height="20" width="30"></rect><rect y="5" width="30" height="10" fill="#F1BF00"></rect></svg></span>
           </div>
-          
+
+          <?php
+            // [FIX 2026-01-27] 角色显示翻译
+            $role_raw = $_SESSION['kds_role'] ?? 'staff';
+            $role_display_map = [
+                'manager' => '店长',
+                'staff' => '员工'
+            ];
+            $role_display = $role_display_map[$role_raw] ?? $role_raw;
+          ?>
+          <div class="dropdown kds-user-dropdown">
+            <a class="kds-user-toggle d-flex align-items-center gap-2 text-decoration-none" href="#" role="button" id="kdsUserDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="bi bi-person-circle"></i>
+              <span class="kds-user-name"><?php echo htmlspecialchars($_SESSION['kds_display_name'] ?? 'KDS User'); ?></span>
+              <i class="bi bi-caret-down-fill" style="font-size: 0.7rem;"></i>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end kds-user-menu" aria-labelledby="kdsUserDropdown">
+              <li class="kds-user-info-item">
+                <span class="kds-info-label">账号:</span>
+                <span class="kds-info-value"><?php echo htmlspecialchars($_SESSION['kds_username'] ?? ''); ?></span>
+              </li>
+              <li class="kds-user-info-item">
+                <span class="kds-info-label">角色:</span>
+                <span class="kds-info-value"><?php echo htmlspecialchars($role_display); ?></span>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item kds-change-pwd-btn" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                  <i class="bi bi-key me-2"></i>修改密码
+                </a>
+              </li>
+            </ul>
+          </div>
+
           <div class="kds-top-actions d-flex align-items-center gap-3">
-            <a href="#" title="设置"><i class="bi bi-gear-fill"></i></a>
             <a href="logout.php" class="btn btn-sm btn-outline-danger kds-logout-btn" title="退出登录">
                 <i class="bi bi-box-arrow-right me-1"></i> <span data-i18n-key="btn_logout">退出</span>
             </a>

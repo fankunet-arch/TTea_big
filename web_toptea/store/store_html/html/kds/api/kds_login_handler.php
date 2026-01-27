@@ -43,6 +43,7 @@ try {
             $_SESSION['kds_user_id'] = $user['id'];
             $_SESSION['kds_username'] = $user['username'];
             $_SESSION['kds_display_name'] = $user['display_name'];
+            $_SESSION['kds_role'] = $user['role']; // [FIX 2026-01-27] 保存角色到会话
             $_SESSION['kds_store_id'] = $store['id'];
             $_SESSION['kds_store_name'] = $store['store_name'];
             

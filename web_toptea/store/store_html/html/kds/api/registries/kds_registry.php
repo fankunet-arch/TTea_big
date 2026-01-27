@@ -526,6 +526,384 @@ function handle_kds_recent_imports(PDO $pdo, array $config, array $input_data): 
 
 
 /* -------------------------------------------------------------------------- */
+/* Handlers: 门店检查系统 (2026-01-27)                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 获取门店检查任务
+ */
+function handle_kds_get_inspection_tasks(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $user_role = $_SESSION['kds_role'] ?? '';
+
+    // 只有店长可以查看检查任务
+    if ($user_role !== 'manager') {
+        json_error('只有店长可以查看检查任务', 403);
+    }
+
+    $period = $_GET['period'] ?? 'current';
+
+    // 确保当期任务已生成
+    if ($period === 'current') {
+        ensureCurrentTasksExist($pdo, $store_id);
+    }
+
+    $now = new DateTime();
+
+    if ($period === 'current') {
+        // 获取当期任务（包括所有周期类型的当前周期）
+        $sql = "
+            SELECT
+                t.id, t.template_id, t.period_key, t.period_start, t.period_end, t.status,
+                t.completed_at, t.completed_by, t.notes,
+                tpl.template_name, tpl.description as template_description, tpl.frequency_type, tpl.photo_hint,
+                ku.display_name as completed_by_name,
+                (SELECT COUNT(*) FROM store_inspection_photos WHERE task_id = t.id) as photo_count
+            FROM store_inspection_tasks t
+            JOIN store_inspection_templates tpl ON tpl.id = t.template_id
+            LEFT JOIN kds_users ku ON ku.id = t.completed_by
+            WHERE t.store_id = ?
+              AND t.period_end >= ?
+            ORDER BY t.status ASC, t.period_end ASC
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$store_id, $now->format('Y-m-d')]);
+    } else {
+        // 获取历史任务
+        $sql = "
+            SELECT
+                t.id, t.template_id, t.period_key, t.period_start, t.period_end, t.status,
+                t.completed_at, t.completed_by, t.notes,
+                tpl.template_name, tpl.description as template_description, tpl.frequency_type, tpl.photo_hint,
+                ku.display_name as completed_by_name,
+                (SELECT COUNT(*) FROM store_inspection_photos WHERE task_id = t.id) as photo_count
+            FROM store_inspection_tasks t
+            JOIN store_inspection_templates tpl ON tpl.id = t.template_id
+            LEFT JOIN kds_users ku ON ku.id = t.completed_by
+            WHERE t.store_id = ?
+              AND t.status = 'completed'
+            ORDER BY t.completed_at DESC
+            LIMIT 50
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$store_id]);
+    }
+
+    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // 计算汇总
+    $summary = ['total' => count($tasks), 'completed' => 0, 'pending' => 0];
+    foreach ($tasks as $task) {
+        if ($task['status'] === 'completed') {
+            $summary['completed']++;
+        } else {
+            $summary['pending']++;
+        }
+    }
+
+    json_ok(['tasks' => $tasks, 'summary' => $summary], '检查任务列表');
+}
+
+/**
+ * 确保当期任务已生成
+ */
+function ensureCurrentTasksExist(PDO $pdo, int $store_id): void {
+    $now = new DateTime();
+
+    // 获取该门店适用的活跃模板
+    $sql = "
+        SELECT tpl.*
+        FROM store_inspection_templates tpl
+        WHERE tpl.is_active = 1
+          AND (tpl.apply_to_all = 1
+               OR EXISTS (SELECT 1 FROM store_inspection_template_stores ts WHERE ts.template_id = tpl.id AND ts.store_id = ?))
+    ";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$store_id]);
+    $templates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($templates as $tpl) {
+        $freq = $tpl['frequency_type'];
+
+        // 计算周期
+        switch ($freq) {
+            case 'weekly':
+                $period_key = $now->format('Y-\\WW');
+                $period_start = (clone $now)->modify('monday this week')->format('Y-m-d');
+                $due_weekday = (int)$tpl['due_weekday'];
+                $period_end_dt = (clone $now)->modify('monday this week');
+                $period_end_dt->modify('+' . ($due_weekday - 1) . ' days');
+                $period_end = $period_end_dt->format('Y-m-d');
+                break;
+            case 'yearly':
+                $period_key = $now->format('Y');
+                $period_start = $now->format('Y') . '-01-01';
+                $due_month = (int)$tpl['due_month'];
+                $due_day = min((int)$tpl['due_day'], 28);
+                $period_end = $now->format('Y') . '-' . str_pad($due_month, 2, '0', STR_PAD_LEFT) . '-' . str_pad($due_day, 2, '0', STR_PAD_LEFT);
+                break;
+            default: // monthly
+                $period_key = $now->format('Y-m');
+                $period_start = $now->format('Y-m') . '-01';
+                $due_day = (int)$tpl['due_day'];
+                $last_day = (int)$now->format('t');
+                $due_day = min($due_day, $last_day);
+                $period_end = $now->format('Y-m') . '-' . str_pad($due_day, 2, '0', STR_PAD_LEFT);
+        }
+
+        // 检查是否已存在
+        $stmt = $pdo->prepare("SELECT id FROM store_inspection_tasks WHERE store_id = ? AND template_id = ? AND period_key = ?");
+        $stmt->execute([$store_id, $tpl['id'], $period_key]);
+
+        if (!$stmt->fetch()) {
+            // 创建任务
+            $stmt = $pdo->prepare("INSERT INTO store_inspection_tasks (store_id, template_id, period_key, period_start, period_end) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$store_id, $tpl['id'], $period_key, $period_start, $period_end]);
+        }
+    }
+}
+
+/**
+ * 获取任务详情
+ */
+function handle_kds_inspection_task_detail(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $task_id = (int)($_GET['id'] ?? 0);
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT
+            t.*,
+            tpl.template_name, tpl.description as template_description, tpl.photo_hint,
+            ku.display_name as completed_by_name
+        FROM store_inspection_tasks t
+        JOIN store_inspection_templates tpl ON tpl.id = t.template_id
+        LEFT JOIN kds_users ku ON ku.id = t.completed_by
+        WHERE t.id = ? AND t.store_id = ?
+    ");
+    $stmt->execute([$task_id, $store_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+
+    // 获取照片
+    $stmt = $pdo->prepare("
+        SELECT p.*, ku.display_name as uploaded_by_name
+        FROM store_inspection_photos p
+        LEFT JOIN kds_users ku ON ku.id = p.uploaded_by
+        WHERE p.task_id = ?
+        ORDER BY p.uploaded_at
+    ");
+    $stmt->execute([$task_id]);
+    $task['photos'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    json_ok($task, '任务详情');
+}
+
+/**
+ * 上传检查照片
+ */
+function handle_kds_upload_inspection_photo(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $user_id = (int)($_SESSION['kds_user_id'] ?? 0);
+    $task_id = (int)($_POST['task_id'] ?? 0);
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    // 验证任务归属
+    $stmt = $pdo->prepare("SELECT id, status FROM store_inspection_tasks WHERE id = ? AND store_id = ?");
+    $stmt->execute([$task_id, $store_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+
+    if ($task['status'] === 'completed') {
+        json_error('任务已完成，无法上传照片', 400);
+    }
+
+    // 检查文件上传
+    if (!isset($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
+        json_error('照片上传失败', 400);
+    }
+
+    $file = $_FILES['photo'];
+
+    // 验证文件类型
+    $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+
+    if (!in_array($mimeType, $allowedTypes)) {
+        json_error('只允许上传 JPEG、PNG 或 WEBP 格式的图片', 400);
+    }
+
+    // 文件大小限制 (2MB)
+    if ($file['size'] > 2 * 1024 * 1024) {
+        json_error('照片大小不能超过 2MB', 400);
+    }
+
+    // 创建存储目录
+    $year = date('Y');
+    $month = date('m');
+    $uploadDir = realpath(__DIR__ . '/../../../..') . "/store_images/inspections/{$store_id}/{$year}/{$month}";
+
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+
+    // 生成文件名
+    $fileHash = hash_file('sha256', $file['tmp_name']);
+    $fileName = "task_{$task_id}_" . time() . "_" . substr($fileHash, 0, 8) . ".jpg";
+    $filePath = "{$store_id}/{$year}/{$month}/{$fileName}";
+    $fullPath = $uploadDir . '/' . $fileName;
+
+    // 移动文件
+    if (!move_uploaded_file($file['tmp_name'], $fullPath)) {
+        json_error('保存照片失败', 500);
+    }
+
+    // 提取 EXIF 信息
+    $takenAt = null;
+    $deviceMake = null;
+    $deviceModel = null;
+    $latitude = null;
+    $longitude = null;
+
+    if (function_exists('exif_read_data') && $mimeType === 'image/jpeg') {
+        $exif = @exif_read_data($fullPath);
+        if ($exif) {
+            if (isset($exif['DateTimeOriginal'])) {
+                $takenAt = date('Y-m-d H:i:s', strtotime($exif['DateTimeOriginal']));
+            }
+            $deviceMake = $exif['Make'] ?? null;
+            $deviceModel = $exif['Model'] ?? null;
+
+            // GPS 信息
+            if (isset($exif['GPSLatitude']) && isset($exif['GPSLongitude'])) {
+                $latitude = gpsToDecimal($exif['GPSLatitude'], $exif['GPSLatitudeRef'] ?? 'N');
+                $longitude = gpsToDecimal($exif['GPSLongitude'], $exif['GPSLongitudeRef'] ?? 'E');
+            }
+        }
+    }
+
+    // 解析验证标记
+    $validationFlags = json_decode($_POST['validation_flags'] ?? '{}', true) ?: [];
+
+    // 检查 EXIF
+    if (!$takenAt) {
+        $validationFlags['no_exif'] = true;
+    }
+
+    // 保存到数据库
+    $stmt = $pdo->prepare("
+        INSERT INTO store_inspection_photos
+        (task_id, photo_path, file_size, file_hash, taken_at, device_make, device_model, latitude, longitude, uploaded_by, upload_ip, validation_flags)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->execute([
+        $task_id,
+        $filePath,
+        filesize($fullPath),
+        $fileHash,
+        $takenAt,
+        $deviceMake,
+        $deviceModel,
+        $latitude,
+        $longitude,
+        $user_id,
+        $_SERVER['REMOTE_ADDR'] ?? null,
+        json_encode($validationFlags)
+    ]);
+
+    json_ok(['photo_id' => $pdo->lastInsertId(), 'path' => $filePath], '照片上传成功');
+}
+
+/**
+ * GPS 坐标转换
+ */
+function gpsToDecimal($coord, $ref) {
+    $degrees = count($coord) > 0 ? gpsToNumeric($coord[0]) : 0;
+    $minutes = count($coord) > 1 ? gpsToNumeric($coord[1]) : 0;
+    $seconds = count($coord) > 2 ? gpsToNumeric($coord[2]) : 0;
+
+    $decimal = $degrees + ($minutes / 60) + ($seconds / 3600);
+
+    if ($ref === 'S' || $ref === 'W') {
+        $decimal *= -1;
+    }
+
+    return $decimal;
+}
+
+function gpsToNumeric($value) {
+    if (is_string($value) && strpos($value, '/') !== false) {
+        $parts = explode('/', $value);
+        if (count($parts) == 2 && $parts[1] != 0) {
+            return $parts[0] / $parts[1];
+        }
+    }
+    return (float)$value;
+}
+
+/**
+ * 完成检查任务
+ */
+function handle_kds_complete_inspection_task(PDO $pdo, array $config, array $input_data): void {
+    $store_id = (int)($_SESSION['kds_store_id'] ?? 0);
+    $user_id = (int)($_SESSION['kds_user_id'] ?? 0);
+
+    $task_id = (int)($input_data['task_id'] ?? 0);
+    $notes = trim($input_data['notes'] ?? '');
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    // 验证任务归属
+    $stmt = $pdo->prepare("SELECT id, status FROM store_inspection_tasks WHERE id = ? AND store_id = ?");
+    $stmt->execute([$task_id, $store_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+
+    if ($task['status'] === 'completed') {
+        json_error('任务已完成', 400);
+    }
+
+    // 检查是否有照片
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM store_inspection_photos WHERE task_id = ?");
+    $stmt->execute([$task_id]);
+    $photoCount = (int)$stmt->fetchColumn();
+
+    if ($photoCount === 0) {
+        json_error('请至少上传一张照片', 400);
+    }
+
+    // 更新任务状态
+    $stmt = $pdo->prepare("
+        UPDATE store_inspection_tasks
+        SET status = 'completed', completed_at = NOW(), completed_by = ?, notes = ?
+        WHERE id = ?
+    ");
+    $stmt->execute([$user_id, $notes ?: null, $task_id]);
+
+    json_ok(null, '检查已完成');
+}
+
+
+/* -------------------------------------------------------------------------- */
 /* 注册表*/
 /* -------------------------------------------------------------------------- */
 return [
@@ -571,6 +949,17 @@ return [
             'parse_import_code' => 'handle_kds_parse_import_code',
             'execute_import' => 'handle_kds_execute_import',
             'recent_imports' => 'handle_kds_recent_imports',
+        ],
+    ],
+
+    // KDS: Inspection (2026-01-27 门店检查系统)
+    'inspection' => [
+        'auth_role' => ROLE_STORE_MANAGER, // 只有店长可用
+        'custom_actions' => [
+            'get_tasks' => 'handle_kds_get_inspection_tasks',
+            'task_detail' => 'handle_kds_inspection_task_detail',
+            'upload_photo' => 'handle_kds_upload_inspection_photo',
+            'complete_task' => 'handle_kds_complete_inspection_task',
         ],
     ],
 ];

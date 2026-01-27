@@ -33,6 +33,9 @@
           <a class="nav-link" href="prep.php" data-i18n-key="nav_prep">物料制备</a>
           <a class="nav-link" href="expiry.php" data-i18n-key="nav_expiry">效期追踪</a>
           <a class="nav-link active" href="#" data-i18n-key="nav_guide">制杯指引</a>
+          <?php if (isset($_SESSION['kds_role']) && $_SESSION['kds_role'] === 'manager'): ?>
+          <a class="nav-link" href="inspection.php" data-i18n-key="nav_inspection">检查清单</a>
+          <?php endif; ?>
         </div>
         
         <div class="ms-auto d-flex align-items-center gap-3">

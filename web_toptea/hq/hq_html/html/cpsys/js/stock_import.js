@@ -1,7 +1,13 @@
 /**
  * Toptea HQ - 入库码管理 JS
- * Version: 1.0
- * Date: 2026-01-26
+ * Version: 1.0.1
+ * Date: 2026-01-27
+ *
+ * [AUDIT FIX 2026-01-27] Naming Convention Documentation:
+ * - JavaScript variables use camelCase (e.g., storeId, importCode) per JS conventions
+ * - API payloads/parameters use snake_case (e.g., store_id, import_code) to match backend/DB
+ * - All API calls in this file correctly map JS camelCase to snake_case API parameters
+ * - Example: const storeId = ... -> url += `&store_id=${storeId}`
  */
 
 const API_BASE = 'api/cpsys_api_gateway.php';

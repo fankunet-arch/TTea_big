@@ -18,9 +18,12 @@ function handle_kds_sop(PDO $pdo, array $config, array $input_data): void {
     if (!$code) { json_error('Missing code', 400); return; }
 
     if (function_exists('getKdsSopByCode')) {
-        // KDS 引擎需要一个 store_id，但 HQ 预览是全局的。
-        // 传入 0 或 1 均可，它将智能拉取 store_id IS NULL 的全局规则。
-        $store_id_for_parser = 1;
+        // [AUDIT FIX 2026-01-27] Accept optional store_id parameter instead of hardcoding
+        // If not provided, default to null (global rules). The KDS engine will fetch
+        // store_id IS NULL global rules when null/0 is passed.
+        $store_id_for_parser = isset($input_data['store_id'])
+            ? (int)$input_data['store_id']
+            : (isset($_GET['store_id']) ? (int)$_GET['store_id'] : null);
         $result = getKdsSopByCode($pdo, (string)$code, $store_id_for_parser);
 
         // 转换回此文件旧的 out() / ok() 格式

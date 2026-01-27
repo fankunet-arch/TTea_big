@@ -78,8 +78,9 @@ return [
     ],
 
     // [R1] 新增 rms_recipes 资源
+    // [AUDIT FIX 2026-01-27] Removed misleading "占位" comment - this resource is fully implemented
     'rms_recipes' => [
-        'table' => 'kds_product_recipes', // 占位
+        'table' => 'kds_product_recipes',
         'pk' => 'id',
         'auth_role' => ROLE_PRODUCT_MANAGER, // POS/KDS 也可访问 (只读)
         'custom_actions' => [

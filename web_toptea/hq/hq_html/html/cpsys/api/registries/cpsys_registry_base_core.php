@@ -520,39 +520,10 @@ function handle_profile_save(PDO $pdo, array $config, array $input_data): void {
 }
 
 // --- 处理器: 打印模板 (print_templates) ---
-function handle_template_get(PDO $pdo, array $config, array $input_data): void {
-    $id = $_GET['id'] ?? json_error('缺少 id', 400);
-    $stmt = $pdo->prepare("SELECT * FROM pos_print_templates WHERE id = ?");
-    $stmt->execute([(int)$id]);
-    $data = $stmt->fetch(PDO::FETCH_ASSOC);
-    $data ? json_ok($data) : json_error('未找到模板', 404);
-}
-function handle_template_save(PDO $pdo, array $config, array $input_data): void {
-    $data = $input_data['data'] ?? json_error('缺少 data', 400);
-    $id = $data['id'] ? (int)$data['id'] : null;
-    $params = [
-        ':template_name' => trim($data['template_name'] ?? ''),
-        ':template_type' => $data['template_type'] ?? null,
-        ':physical_size' => $data['physical_size'] ?? null,
-        ':template_content' => $data['template_content'] ?? '[]',
-        ':is_active' => (int)($data['is_active'] ?? 0),
-        ':store_id' => null // 暂时只支持全局
-    ];
-    if (empty($params[':template_name']) || empty($params[':template_type']) || empty($params[':physical_size'])) json_error('模板名称、类型和物理尺寸为必填项。', 400);
-    if ($id) {
-        $params[':id'] = $id;
-        $sql = "UPDATE pos_print_templates SET store_id = :store_id, template_name = :template_name, template_type = :template_type, template_content = :template_content, physical_size = :physical_size, is_active = :is_active WHERE id = :id";
-        $message = '模板已成功更新。';
-    } else {
-        $sql = "INSERT INTO pos_print_templates (store_id, template_name, template_type, template_content, physical_size, is_active) VALUES (:store_id, :template_name, :template_type, :template_content, :physical_size, :is_active)";
-        $message = '新模板已成功创建。';
-    }
-    $pdo->prepare($sql)->execute($params);
-    json_ok(['id' => $id ?? $pdo->lastInsertId()], $message);
-}
-function handle_template_delete(PDO $pdo, array $config, array $input_data): void {
-    $id = $input_data['id'] ?? json_error('缺少 id', 400);
-    $stmt = $pdo->prepare("DELETE FROM pos_print_templates WHERE id = ?");
-    $stmt->execute([(int)$id]);
-    json_ok(null, '模板已删除。');
-}
+// [AUDIT FIX 2026-01-27] REMOVED: These handlers referenced non-existent table 'pos_print_templates'
+// The print_templates resource has been moved to cpsys_registry_stock.php which uses
+// the correct table 'kds_print_templates' with new handlers:
+//   - handle_print_template_get
+//   - handle_print_template_save
+//   - handle_print_template_delete
+// The old handlers below have been removed as dead code.

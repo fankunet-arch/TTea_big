@@ -212,50 +212,7 @@ function cprms_material_get_next_code(PDO $pdo, array $config, array $input_data
     json_ok(['next_code' => $next_code], '下一个可用编号已找到。');
 }
 
-/* --- 库存 (stock_handler) --- */
-function cprms_stock_actions(PDO $pdo, array $config, array $input_data): void {
-    $action = $input_data['action'] ?? $_GET['act'] ?? null;
-    $data = $input_data['data'] ?? null;
-
-    if ($action === 'add_warehouse_stock') {
-        $material_id = (int)($data['material_id'] ?? 0);
-        $quantity_to_add = (float)($data['quantity'] ?? 0);
-        $unit_id = (int)($data['unit_id'] ?? 0);
-
-        $final_quantity_to_add = cprms_get_base_quantity($pdo, $material_id, $quantity_to_add, $unit_id);
-
-        $pdo->beginTransaction();
-        $sql = "INSERT INTO expsys_warehouse_stock (material_id, quantity)
-                VALUES (:material_id, :quantity)
-                ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([':material_id' => $material_id, ':quantity' => $final_quantity_to_add]);
-        $pdo->commit();
-        json_ok(null, '总仓入库成功！');
-    } elseif ($action === 'allocate_to_store') {
-        $store_id = (int)($data['store_id'] ?? 0);
-        $material_id = (int)($data['material_id'] ?? 0);
-        $quantity_to_allocate = (float)($data['quantity'] ?? 0);
-        $unit_id = (int)($data['unit_id'] ?? 0);
-
-        $final_quantity_to_allocate = cprms_get_base_quantity($pdo, $material_id, $quantity_to_allocate, $unit_id);
-
-        $pdo->beginTransaction();
-        $stmt_warehouse = $pdo->prepare("INSERT INTO expsys_warehouse_stock (material_id, quantity)
-                                         VALUES (?, ?)
-                                         ON DUPLICATE KEY UPDATE quantity = quantity - ?");
-        $stmt_warehouse->execute([$material_id, -$final_quantity_to_allocate, $final_quantity_to_allocate]);
-
-        $stmt_store = $pdo->prepare("INSERT INTO expsys_store_stock (store_id, material_id, quantity)
-                                     VALUES (?, ?, ?)
-                                     ON DUPLICATE KEY UPDATE quantity = quantity + ?");
-        $stmt_store->execute([$store_id, $material_id, $final_quantity_to_allocate, $final_quantity_to_allocate]);
-        $pdo->commit();
-        json_ok(null, '库存调拨成功！');
-    } else {
-        json_error("未知的库存动作: {$action}", 400);
-    }
-}
+/* [2026-01-26 后台重构] 移除总仓库存 cprms_stock_actions 函数，改用 cpsys_registry_stock.php */
 
 /* --- RMS 全局规则 (kds_global_adjustment_rules) --- */
 function cprms_global_rule_get(PDO $pdo, array $config, array $input_data): void {
@@ -686,18 +643,4 @@ function cprms_recipes_get(PDO $pdo, array $config, array $input_data): void {
 }
 // --- [R1] END ---
 
-// --- [R1] START: 新增 rms.tags.list 处理器 ---
-/**
- * 处理器: [R1] rms.tags.list
- * 目标: 供 POS 使用，获取所有标签定义。
- */
-function cprms_tags_get_list(PDO $pdo, array $config, array $input_data): void {
-    // 确保 kds_helper.php 及其依赖 (kds_repo_c.php) 已被加载
-    if (!function_exists('getAllPosTags')) {
-        json_error('依赖函数 getAllPosTags 未加载。', 500);
-    }
-    
-    $tags = getAllPosTags($pdo);
-    json_ok($tags, 'POS 标签列表加载成功。');
-}
-// --- [R1] END ---
+// [2026-01-26 后台重构] 移除 cprms_tags_get_list (POS标签表已删除)

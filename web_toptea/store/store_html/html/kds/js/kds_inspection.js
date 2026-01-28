@@ -1,23 +1,24 @@
 /**
  * Toptea KDS - Inspection Checklist
- * Version: 1.1
+ * Version: 1.2
  * Date: 2026-01-28
  *
- * WebView兼容修复:
- * - 摄像头: 优先使用 getUserMedia API 直接调用摄像头（绕过 file input）
- *           仅在 getUserMedia 不可用时回退到 <input capture>
- * - 相册:   file input 使用 off-screen 定位（而非 display:none）
- *           添加超时检测，若 WebView 未响应 file input 则提示用户
+ * WebView 兼容修复 (v1.2):
+ * 核心问题：Android WebView APK 中 JS 的 input.click() 被静默拦截，
+ *          且 getUserMedia 要求 HTTPS 安全上下文（APK WebView 通常是 HTTP）。
+ *
+ * 解决方案：
+ * - 拍照/相册按钮改为 <label for="inputId">（HTML 层），
+ *   利用浏览器原生 label-input 关联行为触发文件选择，无需任何 JS .click()。
+ * - 完全移除 getUserMedia 相关代码（HTTP 下不可用）。
+ * - 完全移除超时检测代码（在 WebView 中 document.hasFocus() 不可靠，会误报错误）。
+ * - JS 端只负责监听 change 事件、处理/压缩照片、上传。
  */
 
 const API_BASE = 'api/kds_api_gateway.php';
 let currentTasks = [];
 let selectedPhotos = [];
 let currentTaskId = null;
-
-// --- 相机状态 ---
-let cameraStream = null;
-let cameraFacingMode = 'environment'; // 'environment' = 后置, 'user' = 前置
 
 $(document).ready(function() {
     loadTasks('current');
@@ -39,23 +40,18 @@ function initEventHandlers() {
         openTaskDetail(taskId);
     });
 
-    // 拍照按钮 - 优先 getUserMedia，回退 file input
-    $('#btn-camera').on('click', function() {
-        openCamera();
-    });
+    // =============================================
+    // 照片选择 —— 通过 <label for="..."> 原生触发
+    // JS 端只需监听 change 事件，无需 .click()
+    // =============================================
 
-    // 相册按钮 - 带 WebView 超时检测
-    $('#btn-gallery').on('click', function() {
-        openGallery();
-    });
-
-    // 相机输入 (回退方案)
+    // 相机输入 change
     $('#camera-input').on('change', function(e) {
         handlePhotoSelect(e.target.files);
         this.value = '';
     });
 
-    // 相册输入
+    // 相册输入 change
     $('#photo-input').on('change', function(e) {
         handlePhotoSelect(e.target.files);
         this.value = '';
@@ -71,253 +67,6 @@ function initEventHandlers() {
 
     // 提交检查
     $('#btn-submit-inspection').on('click', submitInspection);
-
-    // --- 取景器控制 ---
-    $('#btn-camera-shutter').on('click', captureFromViewfinder);
-    $('#btn-camera-close').on('click', closeCamera);
-    $('#btn-camera-switch').on('click', switchCamera);
-
-    // 取景器 modal 关闭时确保释放摄像头
-    $('#cameraViewfinderModal').on('hidden.bs.modal', function() {
-        stopCameraStream();
-    });
-}
-
-// =============================================
-// 相机功能 - getUserMedia 优先
-// =============================================
-
-/**
- * 打开相机。
- * 策略：先尝试 getUserMedia（WebView 通常支持），不行再回退 file input。
- */
-async function openCamera() {
-    // 检测 getUserMedia 支持
-    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        try {
-            await startCameraStream();
-            return; // 成功打开取景器
-        } catch (err) {
-            console.warn('getUserMedia 失败，回退到 file input:', err.name, err.message);
-        }
-    }
-
-    // 回退：触发 file input (带 capture)
-    triggerFileInput('camera-input');
-}
-
-/**
- * 启动摄像头流并显示取景器 modal
- */
-async function startCameraStream() {
-    // 先停止之前可能存在的流
-    stopCameraStream();
-
-    const constraints = {
-        video: {
-            facingMode: cameraFacingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1440 }
-        },
-        audio: false
-    };
-
-    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    const video = document.getElementById('camera-viewfinder');
-    video.srcObject = cameraStream;
-
-    // 确保视频开始播放
-    await video.play().catch(function() { /* 自动播放策略，忽略 */ });
-
-    // 显示取景器 modal
-    var viewfinderModal = new bootstrap.Modal(document.getElementById('cameraViewfinderModal'), {
-        backdrop: 'static',
-        keyboard: false
-    });
-    viewfinderModal.show();
-}
-
-/**
- * 从取景器截图
- */
-function captureFromViewfinder() {
-    var video = document.getElementById('camera-viewfinder');
-    var canvas = document.getElementById('camera-snapshot-canvas');
-
-    if (!video.videoWidth || !video.videoHeight) {
-        console.error('视频尚未就绪');
-        return;
-    }
-
-    // 使用视频实际分辨率
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // 转为 Blob
-    canvas.toBlob(function(blob) {
-        if (!blob) return;
-
-        // 生成预览
-        var previewUrl = canvas.toDataURL('image/jpeg', 0.8);
-
-        // 检测分辨率
-        var validationFlags = {};
-        if (canvas.width < 800 || canvas.height < 600) {
-            validationFlags.resolution_low = true;
-        }
-
-        selectedPhotos.push({
-            blob: blob,
-            preview: previewUrl,
-            name: 'camera_' + Date.now() + '.jpg',
-            validationFlags: validationFlags
-        });
-
-        renderPhotoPreview();
-
-        // 关闭取景器
-        closeCamera();
-    }, 'image/jpeg', 0.75);
-}
-
-/**
- * 切换前后摄像头
- */
-async function switchCamera() {
-    cameraFacingMode = (cameraFacingMode === 'environment') ? 'user' : 'environment';
-    try {
-        await startCameraStream();
-    } catch (err) {
-        console.error('切换摄像头失败:', err);
-        // 切回原来的
-        cameraFacingMode = (cameraFacingMode === 'environment') ? 'user' : 'environment';
-    }
-}
-
-/**
- * 关闭取景器
- */
-function closeCamera() {
-    var modalEl = document.getElementById('cameraViewfinderModal');
-    var modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) {
-        modal.hide();
-    }
-    stopCameraStream();
-}
-
-/**
- * 停止摄像头流
- */
-function stopCameraStream() {
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(function(track) {
-            track.stop();
-        });
-        cameraStream = null;
-    }
-    var video = document.getElementById('camera-viewfinder');
-    if (video) {
-        video.srcObject = null;
-    }
-}
-
-// =============================================
-// 相册功能 - WebView 兼容
-// =============================================
-
-/**
- * 打开相册选择。
- * 使用超时检测：如果点击 file input 后一段时间没有 change 事件，
- * 说明 WebView 可能不支持，提示用户。
- */
-function openGallery() {
-    triggerFileInput('photo-input');
-}
-
-/**
- * 触发隐藏的 file input，兼容 WebView。
- * 多重策略：
- * 1. 直接 .click()
- * 2. 若失败，尝试临时将元素移到可见区域再 click
- * 3. 超时检测
- */
-function triggerFileInput(inputId) {
-    var input = document.getElementById(inputId);
-    if (!input) return;
-
-    // 重置值以确保同一文件也能触发 change
-    input.value = '';
-
-    // 标记是否已触发 (通过 focus/change 事件判断)
-    var triggered = false;
-
-    var onChangeOnce = function() {
-        triggered = true;
-        input.removeEventListener('change', onChangeOnce);
-    };
-    input.addEventListener('change', onChangeOnce);
-
-    // 策略1: 直接 click
-    input.click();
-
-    // 超时检测 - 若 3 秒内没有反应，可能 WebView 不支持
-    setTimeout(function() {
-        input.removeEventListener('change', onChangeOnce);
-
-        if (triggered) return; // 已经触发了，没问题
-
-        // 检查页面是否失去焦点（file chooser 打开时页面会失去焦点）
-        if (document.hasFocus()) {
-            // 页面仍有焦点 = file chooser 没打开
-            // 尝试策略2: 临时移到可见位置再 click
-            var origStyle = input.getAttribute('style');
-            input.style.cssText = 'position:fixed;top:50%;left:50%;opacity:0.01;width:1px;height:1px;z-index:99999;';
-
-            setTimeout(function() {
-                input.click();
-                // 恢复原始样式
-                setTimeout(function() {
-                    input.setAttribute('style', origStyle || '');
-                }, 500);
-
-                // 二次超时检测
-                setTimeout(function() {
-                    if (!triggered && document.hasFocus()) {
-                        // 确实不支持，提示用户
-                        showFileInputFallbackMessage(inputId === 'camera-input');
-                    }
-                }, 3000);
-            }, 100);
-        }
-        // 如果页面没有焦点，说明 file chooser 已打开，一切正常
-    }, 3000);
-}
-
-/**
- * 当 file input 无法工作时显示提示
- */
-function showFileInputFallbackMessage(isCamera) {
-    if (isCamera) {
-        // 相机 file input 也不行，说明设备根本不支持
-        var msg = '无法打开相机。请检查：\n1. 已授予相机权限\n2. 尝试在系统浏览器中打开此页面';
-        if (window.showKdsAlert) {
-            showKdsAlert(msg, true);
-        } else {
-            alert(msg);
-        }
-    } else {
-        var msg = '无法打开相册。请检查：\n1. 已授予存储/相册权限\n2. 尝试在系统浏览器中打开此页面';
-        if (window.showKdsAlert) {
-            showKdsAlert(msg, true);
-        } else {
-            alert(msg);
-        }
-    }
 }
 
 // =============================================
@@ -508,6 +257,10 @@ function showPhotoUploadModal(task) {
     $('#photoUploadModal').modal('show');
 }
 
+// =============================================
+// 照片处理
+// =============================================
+
 async function handlePhotoSelect(files) {
     if (!files || files.length === 0) return;
 
@@ -528,10 +281,9 @@ async function handlePhotoSelect(files) {
 async function processPhoto(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = async function(e) {
+        reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                // 检测照片质量
                 const validationFlags = {};
 
                 // 分辨率检查
@@ -604,6 +356,10 @@ function renderPhotoPreview() {
         `);
     });
 }
+
+// =============================================
+// 提交
+// =============================================
 
 async function submitInspection() {
     if (selectedPhotos.length === 0) {
@@ -680,6 +436,10 @@ function uploadPhoto(formData) {
         dataType: 'json'
     });
 }
+
+// =============================================
+// 工具函数
+// =============================================
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';

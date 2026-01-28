@@ -91,20 +91,26 @@
                 </div>
 
                 <!-- 照片上传区域 -->
+                <!--
+                    WebView 关键兼容方案：
+                    使用 <label for="inputId"> 替代 <button> + JS .click()。
+                    原因：Android WebView 中，JS 调用 input.click() 经常被静默拦截，
+                    但 <label> 的原生 HTML 关联行为（点击 label = 点击 input）不受此限制。
+                    这是跨所有 WebView 实现最可靠的触发 file input 的方式。
+                -->
                 <div class="photo-upload-area">
                     <div class="upload-buttons d-flex gap-2 mb-3">
-                        <button class="btn btn-primary flex-fill" id="btn-camera" type="button">
+                        <label for="camera-input" class="btn btn-primary flex-fill mb-0" id="btn-camera" role="button">
                             <i class="bi bi-camera-fill me-2"></i>拍照
-                        </button>
-                        <button class="btn btn-outline-primary flex-fill" id="btn-gallery" type="button">
+                        </label>
+                        <label for="photo-input" class="btn btn-outline-primary flex-fill mb-0" id="btn-gallery" role="button">
                             <i class="bi bi-image me-2"></i>相册
-                        </button>
+                        </label>
                     </div>
-                    <!-- WebView兼容：使用off-screen定位而非display:none，避免WebView忽略click事件 -->
-                    <input type="file" id="photo-input" accept="image/*" multiple
-                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;">
                     <input type="file" id="camera-input" accept="image/*" capture="environment"
-                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;">
+                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;">
+                    <input type="file" id="photo-input" accept="image/*" multiple
+                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;">
                 </div>
 
                 <!-- 已选照片预览 -->
@@ -127,36 +133,6 @@
                 <button type="button" class="btn btn-success" id="btn-submit-inspection" disabled>
                     <i class="bi bi-check-circle me-2"></i>提交完成
                 </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- getUserMedia 实时相机取景器 (WebView兼容方案) -->
-<div class="modal fade" id="cameraViewfinderModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content" style="background: #000;">
-            <div class="modal-body p-0 d-flex flex-column">
-                <div class="camera-viewfinder-container" style="flex:1;position:relative;overflow:hidden;">
-                    <video id="camera-viewfinder" autoplay playsinline muted
-                           style="width:100%;height:100%;object-fit:cover;"></video>
-                    <canvas id="camera-snapshot-canvas" style="display:none;"></canvas>
-                </div>
-                <div class="camera-controls d-flex justify-content-center align-items-center gap-4 p-3"
-                     style="background:rgba(0,0,0,0.8);">
-                    <button type="button" class="btn btn-outline-light btn-lg rounded-circle" id="btn-camera-close"
-                            style="width:56px;height:56px;">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                    <button type="button" class="btn btn-light btn-lg rounded-circle" id="btn-camera-shutter"
-                            style="width:72px;height:72px;font-size:1.5rem;">
-                        <i class="bi bi-circle-fill"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-light btn-lg rounded-circle" id="btn-camera-switch"
-                            style="width:56px;height:56px;">
-                        <i class="bi bi-arrow-repeat"></i>
-                    </button>
-                </div>
             </div>
         </div>
     </div>

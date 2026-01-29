@@ -236,10 +236,10 @@ function loadTaskDetail(taskId) {
 function renderTaskDetail(task) {
     const statusBadge = getDetailStatusBadge(task.status);
 
-    // 照片区域（待审核任务带删除按钮）
+    // 照片区域（待审核和已通过任务带删除按钮）
     let photosHtml = '';
     if (task.photos && task.photos.length > 0) {
-        const showDeleteBtn = (task.status === 'pending_review');
+        const showDeleteBtn = (task.status === 'pending_review' || task.status === 'completed');
         photosHtml = `
             <h6 class="mt-4">检查照片 (${task.photos.length} 张)</h6>
             <div class="row g-2">
@@ -272,7 +272,7 @@ function renderTaskDetail(task) {
         photosHtml = '<div class="alert alert-secondary mt-4">暂无照片</div>';
     }
 
-    // 操作区域：仅待审核任务显示审核/退回按钮
+    // 操作区域：待审核显示审核通过+退回，已通过显示退回
     let actionHtml = '';
     if (task.status === 'pending_review') {
         actionHtml = `
@@ -281,6 +281,20 @@ function renderTaskDetail(task) {
                 <button class="btn btn-success" id="btn-approve-task" data-task-id="${task.id}">
                     <i class="bi bi-check-circle me-1"></i>审核通过
                 </button>
+                <div class="flex-grow-1">
+                    <label class="form-label mb-1"><small>退回原因 (可选)</small></label>
+                    <input type="text" class="form-control form-control-sm" id="reject-reason"
+                           placeholder="如：照片模糊，请重新拍摄">
+                </div>
+                <button class="btn btn-danger" id="btn-reject-task" data-task-id="${task.id}">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>退回
+                </button>
+            </div>
+        `;
+    } else if (task.status === 'completed') {
+        actionHtml = `
+            <hr>
+            <div class="d-flex align-items-end gap-2">
                 <div class="flex-grow-1">
                     <label class="form-label mb-1"><small>退回原因 (可选)</small></label>
                     <input type="text" class="form-control form-control-sm" id="reject-reason"

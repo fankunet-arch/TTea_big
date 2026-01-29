@@ -527,7 +527,7 @@ function handle_inspection_delete_photo(PDO $pdo, array $config, array $input_da
 }
 
 /**
- * 退回检查任务（pending_review → pending）
+ * 退回检查任务（pending_review/completed → pending）
  * 软删除所有照片（文件移到 _rejected 目录），数据库记录清除，任务重置。
  */
 function handle_inspection_reject_task(PDO $pdo, array $config, array $input_data): void {
@@ -546,8 +546,8 @@ function handle_inspection_reject_task(PDO $pdo, array $config, array $input_dat
     if (!$task) {
         json_error('任务不存在', 404);
     }
-    if ($task['status'] !== 'pending_review') {
-        json_error('只能退回待审核的任务', 400);
+    if (!in_array($task['status'], ['pending_review', 'completed'], true)) {
+        json_error('只能退回待审核或已通过的任务', 400);
     }
 
     $pdo->beginTransaction();

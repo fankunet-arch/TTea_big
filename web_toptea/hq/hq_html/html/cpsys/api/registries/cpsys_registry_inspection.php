@@ -419,6 +419,110 @@ function generateInspectionTasks(PDO $pdo, string $frequency_type, DateTime $now
 }
 
 
+/**
+ * 删除检查照片（HQ管理员操作）
+ */
+function handle_inspection_delete_photo(PDO $pdo, array $config, array $input_data): void {
+    $data = $input_data['data'] ?? json_error('缺少 data', 400);
+    $photo_id = (int)($data['photo_id'] ?? 0);
+
+    if ($photo_id <= 0) {
+        json_error('缺少照片ID', 400);
+    }
+
+    // 查找照片记录
+    $stmt = $pdo->prepare("SELECT p.*, t.store_id FROM store_inspection_photos p JOIN store_inspection_tasks t ON t.id = p.task_id WHERE p.id = ?");
+    $stmt->execute([$photo_id]);
+    $photo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$photo) {
+        json_error('照片不存在', 404);
+    }
+
+    // 删除物理文件
+    $storeRoot = realpath(__DIR__ . '/../../../../store/store_html');
+    if ($storeRoot && !empty($photo['photo_path'])) {
+        $filePath = $storeRoot . '/store_images/inspections/' . $photo['photo_path'];
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+    }
+
+    // 删除数据库记录
+    $stmt = $pdo->prepare("DELETE FROM store_inspection_photos WHERE id = ?");
+    $stmt->execute([$photo_id]);
+
+    json_ok(null, '照片已删除');
+}
+
+/**
+ * 退回检查任务（已完成 → 待完成）
+ */
+function handle_inspection_reject_task(PDO $pdo, array $config, array $input_data): void {
+    $data = $input_data['data'] ?? json_error('缺少 data', 400);
+    $task_id = (int)($data['task_id'] ?? 0);
+    $reason = trim($data['reason'] ?? '');
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    // 检查任务是否存在且已完成
+    $stmt = $pdo->prepare("SELECT * FROM store_inspection_tasks WHERE id = ?");
+    $stmt->execute([$task_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+    if ($task['status'] !== 'completed') {
+        json_error('只能退回已完成的任务', 400);
+    }
+
+    $pdo->beginTransaction();
+    try {
+        // 获取该任务的照片路径，删除物理文件
+        $stmt = $pdo->prepare("SELECT photo_path FROM store_inspection_photos WHERE task_id = ?");
+        $stmt->execute([$task_id]);
+        $photos = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $storeRoot = realpath(__DIR__ . '/../../../../store/store_html');
+        if ($storeRoot) {
+            foreach ($photos as $photoPath) {
+                if (!empty($photoPath)) {
+                    $filePath = $storeRoot . '/store_images/inspections/' . $photoPath;
+                    if (file_exists($filePath)) {
+                        unlink($filePath);
+                    }
+                }
+            }
+        }
+
+        // 删除该任务所有照片记录
+        $stmt = $pdo->prepare("DELETE FROM store_inspection_photos WHERE task_id = ?");
+        $stmt->execute([$task_id]);
+
+        // 重置任务状态
+        $notes = $reason ? "[退回] {$reason}" : null;
+        $stmt = $pdo->prepare("
+            UPDATE store_inspection_tasks
+            SET status = 'pending',
+                completed_at = NULL,
+                completed_by = NULL,
+                notes = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([$notes, $task_id]);
+
+        $pdo->commit();
+        json_ok(null, '任务已退回，门店需重新完成检查');
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        json_error('退回失败: ' . $e->getMessage(), 500);
+    }
+}
+
+
 /* ============================================================
    注册表
    ============================================================ */
@@ -446,6 +550,8 @@ return [
             'get' => 'handle_inspection_report_get',
             'task_detail' => 'handle_inspection_task_detail',
             'generate_tasks' => 'handle_inspection_generate_tasks',
+            'delete_photo' => 'handle_inspection_delete_photo',
+            'reject_task' => 'handle_inspection_reject_task',
         ],
     ],
 

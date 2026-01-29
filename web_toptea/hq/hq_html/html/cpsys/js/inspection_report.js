@@ -1,9 +1,12 @@
 /**
  * Toptea HQ - Inspection Report
- * Version: 1.1
+ * Version: 2.0
  * Date: 2026-01-29
  *
- * v1.1: 新增照片删除、任务退回功能
+ * v2.0: 三态审核流程 (pending → pending_review → completed)
+ *       - 待审核任务：可审核通过或退回
+ *       - 已通过任务：仅查看
+ *       - 照片软删除（文件移到 _rejected 目录，数据库记录删除）
  */
 
 const API_BASE = 'api/cpsys_api_gateway.php';
@@ -55,6 +58,12 @@ function initEventHandlers() {
     $(document).on('click', '.delete-photo-btn', function() {
         const photoId = $(this).data('photo-id');
         deletePhoto(photoId);
+    });
+
+    // 审核通过
+    $(document).on('click', '#btn-approve-task', function() {
+        const taskId = $(this).data('task-id');
+        approveTask(taskId);
     });
 
     // 退回任务
@@ -117,6 +126,7 @@ function renderReport(data) {
     const summary = data.summary;
     $('#stat-total').text(summary.total);
     $('#stat-completed').text(summary.completed);
+    $('#stat-pending-review').text(summary.pending_review);
     $('#stat-pending').text(summary.pending);
     $('#stat-rate').text(summary.completion_rate);
     $('#period-display').text(data.period_key);
@@ -130,10 +140,8 @@ function renderReport(data) {
     }
 
     data.tasks.forEach(task => {
-        const isCompleted = task.status === 'completed';
-        const statusBadge = isCompleted
-            ? '<span class="badge text-bg-success">已完成</span>'
-            : getDueBadge(task.period_end);
+        const statusBadge = getStatusBadge(task);
+        const rowClass = getRowClass(task);
 
         const completedAt = task.completed_at
             ? formatDateTime(task.completed_at)
@@ -143,7 +151,7 @@ function renderReport(data) {
         const photoCount = task.photo_count || 0;
 
         tbody.append(`
-            <tr class="${isCompleted ? '' : 'table-warning'}">
+            <tr class="${rowClass}">
                 <td>
                     <strong>${escapeHtml(task.store_code)}</strong>
                     <br><small class="text-muted">${escapeHtml(task.store_name)}</small>
@@ -166,6 +174,22 @@ function renderReport(data) {
             </tr>
         `);
     });
+}
+
+function getStatusBadge(task) {
+    if (task.status === 'completed') {
+        return '<span class="badge text-bg-success">已通过</span>';
+    }
+    if (task.status === 'pending_review') {
+        return '<span class="badge text-bg-info">待审核</span>';
+    }
+    return getDueBadge(task.period_end);
+}
+
+function getRowClass(task) {
+    if (task.status === 'completed') return '';
+    if (task.status === 'pending_review') return 'table-info';
+    return 'table-warning';
 }
 
 function getDueBadge(periodEnd) {
@@ -210,14 +234,12 @@ function loadTaskDetail(taskId) {
 }
 
 function renderTaskDetail(task) {
-    const isCompleted = task.status === 'completed';
-    const statusBadge = isCompleted
-        ? '<span class="badge text-bg-success">已完成</span>'
-        : '<span class="badge text-bg-warning">待完成</span>';
+    const statusBadge = getDetailStatusBadge(task.status);
 
-    // 照片区域（带删除按钮）
+    // 照片区域（待审核任务带删除按钮）
     let photosHtml = '';
     if (task.photos && task.photos.length > 0) {
+        const showDeleteBtn = (task.status === 'pending_review');
         photosHtml = `
             <h6 class="mt-4">检查照片 (${task.photos.length} 张)</h6>
             <div class="row g-2">
@@ -234,10 +256,12 @@ function renderTaskDetail(task) {
                                     ${photo.device_model ? `<br>${escapeHtml(photo.device_model)}` : ''}
                                     ${renderValidationFlags(photo.validation_flags)}
                                 </small>
+                                ${showDeleteBtn ? `
                                 <button class="btn btn-sm btn-outline-danger w-100 mt-2 delete-photo-btn"
                                         data-photo-id="${photo.id}">
                                     <i class="bi bi-trash me-1"></i>删除此照片
                                 </button>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -248,23 +272,28 @@ function renderTaskDetail(task) {
         photosHtml = '<div class="alert alert-secondary mt-4">暂无照片</div>';
     }
 
-    // 退回按钮（仅已完成任务显示）
-    let rejectHtml = '';
-    if (isCompleted) {
-        rejectHtml = `
+    // 操作区域：仅待审核任务显示审核/退回按钮
+    let actionHtml = '';
+    if (task.status === 'pending_review') {
+        actionHtml = `
             <hr>
             <div class="d-flex align-items-end gap-2">
+                <button class="btn btn-success" id="btn-approve-task" data-task-id="${task.id}">
+                    <i class="bi bi-check-circle me-1"></i>审核通过
+                </button>
                 <div class="flex-grow-1">
                     <label class="form-label mb-1"><small>退回原因 (可选)</small></label>
                     <input type="text" class="form-control form-control-sm" id="reject-reason"
                            placeholder="如：照片模糊，请重新拍摄">
                 </div>
-                <button class="btn btn-danger btn-sm" id="btn-reject-task" data-task-id="${task.id}">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>退回任务
+                <button class="btn btn-danger" id="btn-reject-task" data-task-id="${task.id}">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>退回
                 </button>
             </div>
         `;
     }
+
+    const showSubmitInfo = (task.status === 'completed' || task.status === 'pending_review');
 
     const html = `
         <div class="row mb-3">
@@ -283,13 +312,13 @@ function renderTaskDetail(task) {
                 <strong>截止日期:</strong> ${task.period_end}
             </div>
         </div>
-        ${isCompleted ? `
+        ${showSubmitInfo ? `
         <div class="row mb-3">
             <div class="col-md-6">
-                <strong>完成时间:</strong> ${formatDateTime(task.completed_at)}
+                <strong>提交时间:</strong> ${formatDateTime(task.completed_at)}
             </div>
             <div class="col-md-6">
-                <strong>完成人:</strong> ${escapeHtml(task.completed_by_name || '-')}
+                <strong>提交人:</strong> ${escapeHtml(task.completed_by_name || '-')}
             </div>
         </div>
         ` : ''}
@@ -306,10 +335,16 @@ function renderTaskDetail(task) {
         </div>
         ` : ''}
         ${photosHtml}
-        ${rejectHtml}
+        ${actionHtml}
     `;
 
     $('#task-detail-body').html(html);
+}
+
+function getDetailStatusBadge(status) {
+    if (status === 'completed') return '<span class="badge text-bg-success">已通过</span>';
+    if (status === 'pending_review') return '<span class="badge text-bg-info">待审核</span>';
+    return '<span class="badge text-bg-warning">待完成</span>';
 }
 
 function renderValidationFlags(flags) {
@@ -325,11 +360,44 @@ function renderValidationFlags(flags) {
 }
 
 // =============================================
+// 审核通过
+// =============================================
+
+function approveTask(taskId) {
+    if (!confirm('确定要通过此任务的审核吗？')) return;
+
+    const $btn = $('#btn-approve-task');
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>处理中...');
+
+    $.ajax({
+        url: `${API_BASE}?res=inspection_report&act=approve_task`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ data: { task_id: taskId } }),
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                alert('已通过审核');
+                $('#task-detail-modal').modal('hide');
+                loadReport();
+            } else {
+                alert('操作失败: ' + response.message);
+                $btn.prop('disabled', false).html('<i class="bi bi-check-circle me-1"></i>审核通过');
+            }
+        },
+        error: function() {
+            alert('网络错误，请重试');
+            $btn.prop('disabled', false).html('<i class="bi bi-check-circle me-1"></i>审核通过');
+        }
+    });
+}
+
+// =============================================
 // 删除照片
 // =============================================
 
 function deletePhoto(photoId) {
-    if (!confirm('确定要删除这张照片吗？此操作不可撤销。')) return;
+    if (!confirm('确定要删除这张照片吗？\n\n照片文件将被移至备份目录，数据库记录将被删除。')) return;
 
     $.ajax({
         url: `${API_BASE}?res=inspection_report&act=delete_photo`,
@@ -364,7 +432,7 @@ function deletePhoto(photoId) {
 // =============================================
 
 function rejectTask(taskId) {
-    if (!confirm('确定要退回此任务吗？\n\n退回后该任务的所有照片将被删除，门店需重新完成检查。')) return;
+    if (!confirm('确定要退回此任务吗？\n\n退回后该任务的所有照片将被移至备份目录，数据库记录将被清除，门店需重新完成检查。')) return;
 
     const reason = ($('#reject-reason').val() || '').trim();
     const $btn = $('#btn-reject-task');
@@ -379,17 +447,16 @@ function rejectTask(taskId) {
         success: function(response) {
             if (response.status === 'success') {
                 alert(response.message);
-                // 关闭模态框，刷新列表
                 $('#task-detail-modal').modal('hide');
                 loadReport();
             } else {
                 alert('退回失败: ' + response.message);
-                $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回任务');
+                $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回');
             }
         },
         error: function() {
             alert('网络错误，请重试');
-            $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回任务');
+            $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回');
         }
     });
 }

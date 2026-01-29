@@ -117,11 +117,17 @@ function renderTasks(tasks) {
 
     tasks.forEach(task => {
         const isCompleted = task.status === 'completed';
+        const isPendingReview = task.status === 'pending_review';
         const statusClass = getStatusClass(task);
-        const statusIcon = isCompleted ? 'bi-check-lg' : 'bi-hourglass-split';
-        const subtitle = isCompleted
-            ? `完成于 ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`
-            : `截止: ${task.period_end} · ${getFrequencyText(task.frequency_type)}`;
+        const statusIcon = isCompleted ? 'bi-check-lg' : isPendingReview ? 'bi-clock' : 'bi-hourglass-split';
+        let subtitle;
+        if (isCompleted) {
+            subtitle = `已通过 · ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`;
+        } else if (isPendingReview) {
+            subtitle = `已提交待审核 · ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`;
+        } else {
+            subtitle = `截止: ${task.period_end} · ${getFrequencyText(task.frequency_type)}`;
+        }
 
         $list.append(`
             <div class="inspection-item ${statusClass}" data-id="${task.id}">
@@ -142,6 +148,7 @@ function renderTasks(tasks) {
 
 function getStatusClass(task) {
     if (task.status === 'completed') return 'completed';
+    if (task.status === 'pending_review') return 'pending-review';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -180,7 +187,7 @@ function openTaskDetail(taskId) {
 
     currentTaskId = taskId;
 
-    if (task.status === 'completed') {
+    if (task.status === 'completed' || task.status === 'pending_review') {
         showCompletedTaskDetail(task);
     } else {
         showPhotoUploadModal(task);
@@ -216,13 +223,17 @@ function renderCompletedDetail(task) {
         `;
     }
 
+    const statusBadge = task.status === 'completed'
+        ? '<span class="badge bg-success">已通过</span>'
+        : '<span class="badge bg-info">待审核</span>';
+
     $('#taskModalTitle').text(task.template_name);
     $('#taskModalBody').html(`
         <div class="mb-3">
-            <span class="badge bg-success">已完成</span>
+            ${statusBadge}
         </div>
-        <p><strong>完成时间:</strong> ${formatDate(task.completed_at)}</p>
-        <p><strong>完成人:</strong> ${escapeHtml(task.completed_by_name || '-')}</p>
+        <p><strong>提交时间:</strong> ${formatDate(task.completed_at)}</p>
+        <p><strong>提交人:</strong> ${escapeHtml(task.completed_by_name || '-')}</p>
         ${task.template_description ? `
         <div class="mb-3">
             <strong>检查要求:</strong>
@@ -407,9 +418,9 @@ async function submitInspection() {
         if (response.status === 'success') {
             $('#photoUploadModal').modal('hide');
             if (window.showKdsAlert) {
-                showKdsAlert('检查提交成功！', false);
+                showKdsAlert('检查已提交，等待总部审核', false);
             } else {
-                alert('检查提交成功！');
+                alert('检查已提交，等待总部审核');
             }
             loadTasks('current');
         } else {

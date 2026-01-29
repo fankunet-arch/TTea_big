@@ -237,6 +237,15 @@
     color: #000;
 }
 
+.item-status.pending-review {
+    background: var(--bs-info);
+    color: white;
+}
+
+.inspection-item.pending-review {
+    border-color: var(--bs-info);
+}
+
 .item-status.overdue {
     background: var(--bs-danger);
     color: white;

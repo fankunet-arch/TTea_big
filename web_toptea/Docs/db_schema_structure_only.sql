@@ -606,7 +606,7 @@ CREATE TABLE `store_inspection_tasks` (
   `period_key` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '周期标识: 2026-01(月), 2026-W04(周), 2026(年)',
   `period_start` date NOT NULL COMMENT '周期开始日期',
   `period_end` date NOT NULL COMMENT '周期截止日期',
-  `status` enum('pending','completed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '任务状态',
+  `status` enum('pending','pending_review','completed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '任务状态: pending=待完成, pending_review=待审核, completed=已通过',
   `completed_at` datetime DEFAULT NULL COMMENT '完成时间',
   `completed_by` int UNSIGNED DEFAULT NULL COMMENT '完成人 (kds_users.id)',
   `notes` text COLLATE utf8mb4_unicode_ci COMMENT '店长备注',

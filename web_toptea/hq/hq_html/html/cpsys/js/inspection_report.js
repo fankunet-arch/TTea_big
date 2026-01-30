@@ -1,10 +1,16 @@
 /**
  * Toptea HQ - Inspection Report
- * Version: 1.0
- * Date: 2026-01-27
+ * Version: 2.0
+ * Date: 2026-01-29
+ *
+ * v2.0: 三态审核流程 (pending → pending_review → completed)
+ *       - 待审核任务：可审核通过或退回
+ *       - 已通过任务：仅查看
+ *       - 照片软删除（文件移到 _rejected 目录，数据库记录删除）
  */
 
 const API_BASE = 'api/cpsys_api_gateway.php';
+let _currentDetailTaskId = null;
 
 $(document).ready(function() {
     initFilters();
@@ -12,9 +18,8 @@ $(document).ready(function() {
 });
 
 function initFilters() {
-    // 设置默认日期为当前月份
     const now = new Date();
-    const yearMonth = now.toISOString().slice(0, 7); // YYYY-MM
+    const yearMonth = now.toISOString().slice(0, 7);
     const weekNum = getWeekNumber(now);
     const year = now.getFullYear();
 
@@ -48,16 +53,34 @@ function initEventHandlers() {
         const taskId = $(this).data('id');
         loadTaskDetail(taskId);
     });
+
+    // 删除单张照片
+    $(document).on('click', '.delete-photo-btn', function() {
+        const photoId = $(this).data('photo-id');
+        deletePhoto(photoId);
+    });
+
+    // 审核通过
+    $(document).on('click', '#btn-approve-task', function() {
+        const taskId = $(this).data('task-id');
+        approveTask(taskId);
+    });
+
+    // 退回任务
+    $(document).on('click', '#btn-reject-task', function() {
+        const taskId = $(this).data('task-id');
+        rejectTask(taskId);
+    });
 }
 
 function getPeriodKey() {
     const type = $('#filter-frequency').val();
     if (type === 'weekly') {
-        return $('#filter-period-week').val(); // YYYY-Www
+        return $('#filter-period-week').val();
     } else if (type === 'yearly') {
-        return $('#filter-period-year').val(); // YYYY
+        return $('#filter-period-year').val();
     } else {
-        return $('#filter-period-month').val(); // YYYY-MM
+        return $('#filter-period-month').val();
     }
 }
 
@@ -100,15 +123,14 @@ function loadReport() {
 }
 
 function renderReport(data) {
-    // 更新统计卡片
     const summary = data.summary;
     $('#stat-total').text(summary.total);
     $('#stat-completed').text(summary.completed);
+    $('#stat-pending-review').text(summary.pending_review);
     $('#stat-pending').text(summary.pending);
     $('#stat-rate').text(summary.completion_rate);
     $('#period-display').text(data.period_key);
 
-    // 渲染任务列表
     const tbody = $('#task-tbody');
     tbody.empty();
 
@@ -118,10 +140,8 @@ function renderReport(data) {
     }
 
     data.tasks.forEach(task => {
-        const isCompleted = task.status === 'completed';
-        const statusBadge = isCompleted
-            ? '<span class="badge text-bg-success">已完成</span>'
-            : getDueBadge(task.period_end);
+        const statusBadge = getStatusBadge(task);
+        const rowClass = getRowClass(task);
 
         const completedAt = task.completed_at
             ? formatDateTime(task.completed_at)
@@ -131,7 +151,7 @@ function renderReport(data) {
         const photoCount = task.photo_count || 0;
 
         tbody.append(`
-            <tr class="${isCompleted ? '' : 'table-warning'}">
+            <tr class="${rowClass}">
                 <td>
                     <strong>${escapeHtml(task.store_code)}</strong>
                     <br><small class="text-muted">${escapeHtml(task.store_name)}</small>
@@ -156,6 +176,22 @@ function renderReport(data) {
     });
 }
 
+function getStatusBadge(task) {
+    if (task.status === 'completed') {
+        return '<span class="badge text-bg-success">已通过</span>';
+    }
+    if (task.status === 'pending_review') {
+        return '<span class="badge text-bg-info">待审核</span>';
+    }
+    return getDueBadge(task.period_end);
+}
+
+function getRowClass(task) {
+    if (task.status === 'completed') return '';
+    if (task.status === 'pending_review') return 'table-info';
+    return 'table-warning';
+}
+
 function getDueBadge(periodEnd) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -171,7 +207,12 @@ function getDueBadge(periodEnd) {
     }
 }
 
+// =============================================
+// 任务详情
+// =============================================
+
 function loadTaskDetail(taskId) {
+    _currentDetailTaskId = taskId;
     const body = $('#task-detail-body');
     body.html('<div class="text-center py-4"><div class="spinner-border"></div></div>');
 
@@ -193,18 +234,17 @@ function loadTaskDetail(taskId) {
 }
 
 function renderTaskDetail(task) {
-    const isCompleted = task.status === 'completed';
-    const statusBadge = isCompleted
-        ? '<span class="badge text-bg-success">已完成</span>'
-        : '<span class="badge text-bg-warning">待完成</span>';
+    const statusBadge = getDetailStatusBadge(task.status);
 
+    // 照片区域（待审核和已通过任务带删除按钮）
     let photosHtml = '';
     if (task.photos && task.photos.length > 0) {
+        const showDeleteBtn = (task.status === 'pending_review' || task.status === 'completed');
         photosHtml = `
             <h6 class="mt-4">检查照片 (${task.photos.length} 张)</h6>
             <div class="row g-2">
                 ${task.photos.map(photo => `
-                    <div class="col-md-4">
+                    <div class="col-md-4" id="photo-card-${photo.id}">
                         <div class="card">
                             <img src="../store/store_images/inspections/${photo.photo_path}" class="card-img-top" alt="检查照片"
                                  style="max-height: 200px; object-fit: cover; cursor: pointer;"
@@ -216,6 +256,12 @@ function renderTaskDetail(task) {
                                     ${photo.device_model ? `<br>${escapeHtml(photo.device_model)}` : ''}
                                     ${renderValidationFlags(photo.validation_flags)}
                                 </small>
+                                ${showDeleteBtn ? `
+                                <button class="btn btn-sm btn-outline-danger w-100 mt-2 delete-photo-btn"
+                                        data-photo-id="${photo.id}">
+                                    <i class="bi bi-trash me-1"></i>删除此照片
+                                </button>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -225,6 +271,43 @@ function renderTaskDetail(task) {
     } else {
         photosHtml = '<div class="alert alert-secondary mt-4">暂无照片</div>';
     }
+
+    // 操作区域：待审核显示审核通过+退回，已通过显示退回
+    let actionHtml = '';
+    if (task.status === 'pending_review') {
+        actionHtml = `
+            <hr>
+            <div class="d-flex align-items-end gap-2">
+                <button class="btn btn-success" id="btn-approve-task" data-task-id="${task.id}">
+                    <i class="bi bi-check-circle me-1"></i>审核通过
+                </button>
+                <div class="flex-grow-1">
+                    <label class="form-label mb-1"><small>退回原因 (可选)</small></label>
+                    <input type="text" class="form-control form-control-sm" id="reject-reason"
+                           placeholder="如：照片模糊，请重新拍摄">
+                </div>
+                <button class="btn btn-danger" id="btn-reject-task" data-task-id="${task.id}">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>退回
+                </button>
+            </div>
+        `;
+    } else if (task.status === 'completed') {
+        actionHtml = `
+            <hr>
+            <div class="d-flex align-items-end gap-2">
+                <div class="flex-grow-1">
+                    <label class="form-label mb-1"><small>退回原因 (可选)</small></label>
+                    <input type="text" class="form-control form-control-sm" id="reject-reason"
+                           placeholder="如：照片模糊，请重新拍摄">
+                </div>
+                <button class="btn btn-danger" id="btn-reject-task" data-task-id="${task.id}">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>退回
+                </button>
+            </div>
+        `;
+    }
+
+    const showSubmitInfo = (task.status === 'completed' || task.status === 'pending_review');
 
     const html = `
         <div class="row mb-3">
@@ -243,13 +326,13 @@ function renderTaskDetail(task) {
                 <strong>截止日期:</strong> ${task.period_end}
             </div>
         </div>
-        ${isCompleted ? `
+        ${showSubmitInfo ? `
         <div class="row mb-3">
             <div class="col-md-6">
-                <strong>完成时间:</strong> ${formatDateTime(task.completed_at)}
+                <strong>提交时间:</strong> ${formatDateTime(task.completed_at)}
             </div>
             <div class="col-md-6">
-                <strong>完成人:</strong> ${escapeHtml(task.completed_by_name || '-')}
+                <strong>提交人:</strong> ${escapeHtml(task.completed_by_name || '-')}
             </div>
         </div>
         ` : ''}
@@ -266,9 +349,16 @@ function renderTaskDetail(task) {
         </div>
         ` : ''}
         ${photosHtml}
+        ${actionHtml}
     `;
 
     $('#task-detail-body').html(html);
+}
+
+function getDetailStatusBadge(status) {
+    if (status === 'completed') return '<span class="badge text-bg-success">已通过</span>';
+    if (status === 'pending_review') return '<span class="badge text-bg-info">待审核</span>';
+    return '<span class="badge text-bg-warning">待完成</span>';
 }
 
 function renderValidationFlags(flags) {
@@ -282,6 +372,112 @@ function renderValidationFlags(flags) {
     if (warnings.length === 0) return '';
     return `<br><span class="badge text-bg-warning">${warnings.join(', ')}</span>`;
 }
+
+// =============================================
+// 审核通过
+// =============================================
+
+function approveTask(taskId) {
+    if (!confirm('确定要通过此任务的审核吗？')) return;
+
+    const $btn = $('#btn-approve-task');
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>处理中...');
+
+    $.ajax({
+        url: `${API_BASE}?res=inspection_report&act=approve_task`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ data: { task_id: taskId } }),
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                alert('已通过审核');
+                $('#task-detail-modal').modal('hide');
+                loadReport();
+            } else {
+                alert('操作失败: ' + response.message);
+                $btn.prop('disabled', false).html('<i class="bi bi-check-circle me-1"></i>审核通过');
+            }
+        },
+        error: function() {
+            alert('网络错误，请重试');
+            $btn.prop('disabled', false).html('<i class="bi bi-check-circle me-1"></i>审核通过');
+        }
+    });
+}
+
+// =============================================
+// 删除照片
+// =============================================
+
+function deletePhoto(photoId) {
+    if (!confirm('确定要删除这张照片吗？\n\n照片文件将被移至备份目录，数据库记录将被删除。')) return;
+
+    $.ajax({
+        url: `${API_BASE}?res=inspection_report&act=delete_photo`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ data: { photo_id: photoId } }),
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                // 从 DOM 移除照片卡片
+                $(`#photo-card-${photoId}`).fadeOut(300, function() {
+                    $(this).remove();
+                    // 更新照片计数标题
+                    const remaining = $('#task-detail-body .col-md-4').length;
+                    $('#task-detail-body h6').first().text(`检查照片 (${remaining} 张)`);
+                    if (remaining === 0) {
+                        $('#task-detail-body .row.g-2').replaceWith('<div class="alert alert-secondary mt-4">暂无照片</div>');
+                    }
+                });
+            } else {
+                alert('删除失败: ' + response.message);
+            }
+        },
+        error: function() {
+            alert('网络错误，请重试');
+        }
+    });
+}
+
+// =============================================
+// 退回任务
+// =============================================
+
+function rejectTask(taskId) {
+    if (!confirm('确定要退回此任务吗？\n\n退回后该任务的所有照片将被移至备份目录，数据库记录将被清除，门店需重新完成检查。')) return;
+
+    const reason = ($('#reject-reason').val() || '').trim();
+    const $btn = $('#btn-reject-task');
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>处理中...');
+
+    $.ajax({
+        url: `${API_BASE}?res=inspection_report&act=reject_task`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ data: { task_id: taskId, reason: reason } }),
+        dataType: 'json',
+        success: function(response) {
+            if (response.status === 'success') {
+                alert(response.message);
+                $('#task-detail-modal').modal('hide');
+                loadReport();
+            } else {
+                alert('退回失败: ' + response.message);
+                $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回');
+            }
+        },
+        error: function() {
+            alert('网络错误，请重试');
+            $btn.prop('disabled', false).html('<i class="bi bi-arrow-counterclockwise me-1"></i>退回');
+        }
+    });
+}
+
+// =============================================
+// 生成任务
+// =============================================
 
 function generateTasks() {
     const frequencyType = $('#filter-frequency').val();
@@ -308,6 +504,10 @@ function generateTasks() {
         }
     });
 }
+
+// =============================================
+// 工具函数
+// =============================================
 
 function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));

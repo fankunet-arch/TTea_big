@@ -48,8 +48,8 @@
 </div>
 
 <!-- 统计卡片 -->
-<div class="row mb-4" id="summary-cards">
-    <div class="col-md-3">
+<div class="row mb-4 g-3" id="summary-cards">
+    <div class="col">
         <div class="card text-bg-primary">
             <div class="card-body">
                 <h6 class="card-title">总任务数</h6>
@@ -57,15 +57,23 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col">
         <div class="card text-bg-success">
             <div class="card-body">
-                <h6 class="card-title">已完成</h6>
+                <h6 class="card-title">已通过</h6>
                 <h2 class="mb-0" id="stat-completed">0</h2>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col">
+        <div class="card text-bg-info">
+            <div class="card-body">
+                <h6 class="card-title">待审核</h6>
+                <h2 class="mb-0" id="stat-pending-review">0</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col">
         <div class="card text-bg-warning">
             <div class="card-body">
                 <h6 class="card-title">待完成</h6>
@@ -73,8 +81,8 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-bg-info">
+    <div class="col">
+        <div class="card text-bg-secondary">
             <div class="card-body">
                 <h6 class="card-title">完成率</h6>
                 <h2 class="mb-0"><span id="stat-rate">0</span>%</h2>

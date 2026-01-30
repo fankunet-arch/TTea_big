@@ -240,6 +240,7 @@ function handle_inspection_report_get(PDO $pdo, array $config, array $input_data
     $summary = [
         'total' => count($tasks),
         'completed' => 0,
+        'pending_review' => 0,
         'pending' => 0,
         'completion_rate' => 0,
     ];
@@ -247,6 +248,8 @@ function handle_inspection_report_get(PDO $pdo, array $config, array $input_data
     foreach ($tasks as $task) {
         if ($task['status'] === 'completed') {
             $summary['completed']++;
+        } elseif ($task['status'] === 'pending_review') {
+            $summary['pending_review']++;
         } else {
             $summary['pending']++;
         }
@@ -419,6 +422,169 @@ function generateInspectionTasks(PDO $pdo, string $frequency_type, DateTime $now
 }
 
 
+/**
+ * 软删除照片：将文件移到 _rejected 目录（按门店/项目组织），删除数据库记录。
+ * 文件保留在磁盘上以便误删恢复或争议处理，后续可手动物理删除。
+ */
+function softDeleteInspectionPhotos(PDO $pdo, array $photoPaths, int $storeId, int $taskId): void {
+    if (empty($photoPaths)) return;
+
+    $storeRoot = realpath(__DIR__ . '/../../../../store/store_html');
+    if (!$storeRoot) return;
+
+    // 获取门店和模板信息用于目录命名
+    $stmt = $pdo->prepare("
+        SELECT s.store_code, s.store_name, tpl.template_name, t.period_key
+        FROM store_inspection_tasks t
+        JOIN kds_stores s ON s.id = t.store_id
+        JOIN store_inspection_templates tpl ON tpl.id = t.template_id
+        WHERE t.id = ?
+    ");
+    $stmt->execute([$taskId]);
+    $info = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // 构建 _rejected 子目录：门店代码_门店名/模板名_周期
+    $storePart = preg_replace('/[^\w\x{4e00}-\x{9fff}-]/u', '_', ($info['store_code'] ?? '') . '_' . ($info['store_name'] ?? ''));
+    $templatePart = preg_replace('/[^\w\x{4e00}-\x{9fff}-]/u', '_', ($info['template_name'] ?? '') . '_' . ($info['period_key'] ?? ''));
+    $rejectedDir = $storeRoot . "/store_images/inspections/_rejected/{$storePart}/{$templatePart}";
+
+    if (!is_dir($rejectedDir)) {
+        mkdir($rejectedDir, 0755, true);
+    }
+
+    foreach ($photoPaths as $photoPath) {
+        if (empty($photoPath)) continue;
+        $srcFile = $storeRoot . '/store_images/inspections/' . $photoPath;
+        if (file_exists($srcFile)) {
+            $destFile = $rejectedDir . '/' . basename($photoPath);
+            rename($srcFile, $destFile);
+        }
+    }
+}
+
+/**
+ * 审核通过检查任务（pending_review → completed）
+ */
+function handle_inspection_approve_task(PDO $pdo, array $config, array $input_data): void {
+    $data = $input_data['data'] ?? json_error('缺少 data', 400);
+    $task_id = (int)($data['task_id'] ?? 0);
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    $stmt = $pdo->prepare("SELECT id, status FROM store_inspection_tasks WHERE id = ?");
+    $stmt->execute([$task_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+    if ($task['status'] !== 'pending_review') {
+        json_error('只能审核待审核状态的任务', 400);
+    }
+
+    $stmt = $pdo->prepare("UPDATE store_inspection_tasks SET status = 'completed' WHERE id = ?");
+    $stmt->execute([$task_id]);
+
+    json_ok(null, '已通过审核');
+}
+
+/**
+ * 删除检查照片（HQ管理员操作）
+ * 软删除：文件移到 _rejected 目录，数据库记录删除
+ */
+function handle_inspection_delete_photo(PDO $pdo, array $config, array $input_data): void {
+    $data = $input_data['data'] ?? json_error('缺少 data', 400);
+    $photo_id = (int)($data['photo_id'] ?? 0);
+
+    if ($photo_id <= 0) {
+        json_error('缺少照片ID', 400);
+    }
+
+    // 查找照片记录（含任务和门店信息）
+    $stmt = $pdo->prepare("
+        SELECT p.photo_path, p.task_id, t.store_id
+        FROM store_inspection_photos p
+        JOIN store_inspection_tasks t ON t.id = p.task_id
+        WHERE p.id = ?
+    ");
+    $stmt->execute([$photo_id]);
+    $photo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$photo) {
+        json_error('照片不存在', 404);
+    }
+
+    // 软删除：移到 _rejected 目录
+    softDeleteInspectionPhotos($pdo, [$photo['photo_path']], (int)$photo['store_id'], (int)$photo['task_id']);
+
+    // 删除数据库记录
+    $stmt = $pdo->prepare("DELETE FROM store_inspection_photos WHERE id = ?");
+    $stmt->execute([$photo_id]);
+
+    json_ok(null, '照片已删除');
+}
+
+/**
+ * 退回检查任务（pending_review/completed → pending）
+ * 软删除所有照片（文件移到 _rejected 目录），数据库记录清除，任务重置。
+ */
+function handle_inspection_reject_task(PDO $pdo, array $config, array $input_data): void {
+    $data = $input_data['data'] ?? json_error('缺少 data', 400);
+    $task_id = (int)($data['task_id'] ?? 0);
+    $reason = trim($data['reason'] ?? '');
+
+    if ($task_id <= 0) {
+        json_error('缺少任务ID', 400);
+    }
+
+    $stmt = $pdo->prepare("SELECT * FROM store_inspection_tasks WHERE id = ?");
+    $stmt->execute([$task_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$task) {
+        json_error('任务不存在', 404);
+    }
+    if (!in_array($task['status'], ['pending_review', 'completed'], true)) {
+        json_error('只能退回待审核或已通过的任务', 400);
+    }
+
+    $pdo->beginTransaction();
+    try {
+        // 获取照片路径
+        $stmt = $pdo->prepare("SELECT photo_path FROM store_inspection_photos WHERE task_id = ?");
+        $stmt->execute([$task_id]);
+        $photoPaths = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        // 软删除：移动文件到 _rejected 目录（按门店/项目组织）
+        softDeleteInspectionPhotos($pdo, $photoPaths, (int)$task['store_id'], $task_id);
+
+        // 删除数据库照片记录
+        $stmt = $pdo->prepare("DELETE FROM store_inspection_photos WHERE task_id = ?");
+        $stmt->execute([$task_id]);
+
+        // 重置任务状态
+        $notes = $reason ? "[退回] {$reason}" : null;
+        $stmt = $pdo->prepare("
+            UPDATE store_inspection_tasks
+            SET status = 'pending',
+                completed_at = NULL,
+                completed_by = NULL,
+                notes = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([$notes, $task_id]);
+
+        $pdo->commit();
+        json_ok(null, '任务已退回，门店需重新完成检查');
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        json_error('退回失败: ' . $e->getMessage(), 500);
+    }
+}
+
+
 /* ============================================================
    注册表
    ============================================================ */
@@ -446,6 +612,9 @@ return [
             'get' => 'handle_inspection_report_get',
             'task_detail' => 'handle_inspection_task_detail',
             'generate_tasks' => 'handle_inspection_generate_tasks',
+            'approve_task' => 'handle_inspection_approve_task',
+            'delete_photo' => 'handle_inspection_delete_photo',
+            'reject_task' => 'handle_inspection_reject_task',
         ],
     ],
 

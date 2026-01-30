@@ -1,7 +1,18 @@
 /**
  * Toptea KDS - Inspection Checklist
- * Version: 1.0
- * Date: 2026-01-27
+ * Version: 1.2
+ * Date: 2026-01-28
+ *
+ * WebView 兼容修复 (v1.2):
+ * 核心问题：Android WebView APK 中 JS 的 input.click() 被静默拦截，
+ *          且 getUserMedia 要求 HTTPS 安全上下文（APK WebView 通常是 HTTP）。
+ *
+ * 解决方案：
+ * - 拍照/相册按钮改为 <label for="inputId">（HTML 层），
+ *   利用浏览器原生 label-input 关联行为触发文件选择，无需任何 JS .click()。
+ * - 完全移除 getUserMedia 相关代码（HTTP 下不可用）。
+ * - 完全移除超时检测代码（在 WebView 中 document.hasFocus() 不可靠，会误报错误）。
+ * - JS 端只负责监听 change 事件、处理/压缩照片、上传。
  */
 
 const API_BASE = 'api/kds_api_gateway.php';
@@ -29,23 +40,18 @@ function initEventHandlers() {
         openTaskDetail(taskId);
     });
 
-    // 拍照按钮
-    $('#btn-camera').on('click', function() {
-        $('#camera-input').click();
-    });
+    // =============================================
+    // 照片选择 —— 通过 <label for="..."> 原生触发
+    // JS 端只需监听 change 事件，无需 .click()
+    // =============================================
 
-    // 相册按钮
-    $('#btn-gallery').on('click', function() {
-        $('#photo-input').click();
-    });
-
-    // 相机输入
+    // 相机输入 change
     $('#camera-input').on('change', function(e) {
         handlePhotoSelect(e.target.files);
         this.value = '';
     });
 
-    // 相册输入
+    // 相册输入 change
     $('#photo-input').on('change', function(e) {
         handlePhotoSelect(e.target.files);
         this.value = '';
@@ -62,6 +68,10 @@ function initEventHandlers() {
     // 提交检查
     $('#btn-submit-inspection').on('click', submitInspection);
 }
+
+// =============================================
+// 任务加载与渲染
+// =============================================
 
 function loadTasks(period) {
     const $list = $('#inspection-list');
@@ -107,11 +117,17 @@ function renderTasks(tasks) {
 
     tasks.forEach(task => {
         const isCompleted = task.status === 'completed';
+        const isPendingReview = task.status === 'pending_review';
         const statusClass = getStatusClass(task);
-        const statusIcon = isCompleted ? 'bi-check-lg' : 'bi-hourglass-split';
-        const subtitle = isCompleted
-            ? `完成于 ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`
-            : `截止: ${task.period_end} · ${getFrequencyText(task.frequency_type)}`;
+        const statusIcon = isCompleted ? 'bi-check-lg' : isPendingReview ? 'bi-clock' : 'bi-hourglass-split';
+        let subtitle;
+        if (isCompleted) {
+            subtitle = `已通过 · ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`;
+        } else if (isPendingReview) {
+            subtitle = `已提交待审核 · ${formatDate(task.completed_at)} · ${task.photo_count || 0}张照片`;
+        } else {
+            subtitle = `截止: ${task.period_end} · ${getFrequencyText(task.frequency_type)}`;
+        }
 
         $list.append(`
             <div class="inspection-item ${statusClass}" data-id="${task.id}">
@@ -132,6 +148,7 @@ function renderTasks(tasks) {
 
 function getStatusClass(task) {
     if (task.status === 'completed') return 'completed';
+    if (task.status === 'pending_review') return 'pending-review';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -160,23 +177,24 @@ function updateProgress(summary) {
     $('#progress-bar').css('width', rate + '%');
 }
 
+// =============================================
+// 任务详情与上传
+// =============================================
+
 function openTaskDetail(taskId) {
     const task = currentTasks.find(t => t.id == taskId);
     if (!task) return;
 
     currentTaskId = taskId;
 
-    if (task.status === 'completed') {
-        // 查看已完成任务详情
+    if (task.status === 'completed' || task.status === 'pending_review') {
         showCompletedTaskDetail(task);
     } else {
-        // 打开上传照片界面
         showPhotoUploadModal(task);
     }
 }
 
 function showCompletedTaskDetail(task) {
-    // 加载详细信息
     $.ajax({
         url: `${API_BASE}?res=inspection&act=task_detail&id=${task.id}`,
         type: 'GET',
@@ -205,13 +223,17 @@ function renderCompletedDetail(task) {
         `;
     }
 
+    const statusBadge = task.status === 'completed'
+        ? '<span class="badge bg-success">已通过</span>'
+        : '<span class="badge bg-info">待审核</span>';
+
     $('#taskModalTitle').text(task.template_name);
     $('#taskModalBody').html(`
         <div class="mb-3">
-            <span class="badge bg-success">已完成</span>
+            ${statusBadge}
         </div>
-        <p><strong>完成时间:</strong> ${formatDate(task.completed_at)}</p>
-        <p><strong>完成人:</strong> ${escapeHtml(task.completed_by_name || '-')}</p>
+        <p><strong>提交时间:</strong> ${formatDate(task.completed_at)}</p>
+        <p><strong>提交人:</strong> ${escapeHtml(task.completed_by_name || '-')}</p>
         ${task.template_description ? `
         <div class="mb-3">
             <strong>检查要求:</strong>
@@ -246,6 +268,10 @@ function showPhotoUploadModal(task) {
     $('#photoUploadModal').modal('show');
 }
 
+// =============================================
+// 照片处理
+// =============================================
+
 async function handlePhotoSelect(files) {
     if (!files || files.length === 0) return;
 
@@ -266,10 +292,9 @@ async function handlePhotoSelect(files) {
 async function processPhoto(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = async function(e) {
+        reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                // 检测照片质量
                 const validationFlags = {};
 
                 // 分辨率检查
@@ -343,6 +368,10 @@ function renderPhotoPreview() {
     });
 }
 
+// =============================================
+// 提交
+// =============================================
+
 async function submitInspection() {
     if (selectedPhotos.length === 0) {
         if (window.showKdsAlert) {
@@ -389,9 +418,9 @@ async function submitInspection() {
         if (response.status === 'success') {
             $('#photoUploadModal').modal('hide');
             if (window.showKdsAlert) {
-                showKdsAlert('检查提交成功！', false);
+                showKdsAlert('检查已提交，等待总部审核', false);
             } else {
-                alert('检查提交成功！');
+                alert('检查已提交，等待总部审核');
             }
             loadTasks('current');
         } else {
@@ -418,6 +447,10 @@ function uploadPhoto(formData) {
         dataType: 'json'
     });
 }
+
+// =============================================
+// 工具函数
+// =============================================
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';

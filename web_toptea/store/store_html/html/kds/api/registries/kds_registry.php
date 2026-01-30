@@ -577,7 +577,7 @@ function handle_kds_get_inspection_tasks(PDO $pdo, array $config, array $input_d
             JOIN store_inspection_templates tpl ON tpl.id = t.template_id
             LEFT JOIN kds_users ku ON ku.id = t.completed_by
             WHERE t.store_id = ?
-              AND t.status = 'completed'
+              AND t.status IN ('completed', 'pending_review')
             ORDER BY t.completed_at DESC
             LIMIT 50
         ";
@@ -588,10 +588,12 @@ function handle_kds_get_inspection_tasks(PDO $pdo, array $config, array $input_d
     $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // 计算汇总
-    $summary = ['total' => count($tasks), 'completed' => 0, 'pending' => 0];
+    $summary = ['total' => count($tasks), 'completed' => 0, 'pending' => 0, 'pending_review' => 0];
     foreach ($tasks as $task) {
         if ($task['status'] === 'completed') {
             $summary['completed']++;
+        } elseif ($task['status'] === 'pending_review') {
+            $summary['pending_review']++;
         } else {
             $summary['pending']++;
         }
@@ -722,8 +724,8 @@ function handle_kds_upload_inspection_photo(PDO $pdo, array $config, array $inpu
         json_error('任务不存在', 404);
     }
 
-    if ($task['status'] === 'completed') {
-        json_error('任务已完成，无法上传照片', 400);
+    if ($task['status'] === 'completed' || $task['status'] === 'pending_review') {
+        json_error('任务已提交，无法上传照片', 400);
     }
 
     // 检查文件上传
@@ -875,7 +877,10 @@ function handle_kds_complete_inspection_task(PDO $pdo, array $config, array $inp
     }
 
     if ($task['status'] === 'completed') {
-        json_error('任务已完成', 400);
+        json_error('任务已通过审核', 400);
+    }
+    if ($task['status'] === 'pending_review') {
+        json_error('任务已提交，等待总部审核', 400);
     }
 
     // 检查是否有照片
@@ -887,15 +892,15 @@ function handle_kds_complete_inspection_task(PDO $pdo, array $config, array $inp
         json_error('请至少上传一张照片', 400);
     }
 
-    // 更新任务状态
+    // 提交审核（不再直接标记完成）
     $stmt = $pdo->prepare("
         UPDATE store_inspection_tasks
-        SET status = 'completed', completed_at = NOW(), completed_by = ?, notes = ?
+        SET status = 'pending_review', completed_at = NOW(), completed_by = ?, notes = ?
         WHERE id = ?
     ");
     $stmt->execute([$user_id, $notes ?: null, $task_id]);
 
-    json_ok(null, '检查已完成');
+    json_ok(null, '检查已提交，等待总部审核');
 }
 
 

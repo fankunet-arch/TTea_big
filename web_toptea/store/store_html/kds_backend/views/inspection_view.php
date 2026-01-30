@@ -91,17 +91,26 @@
                 </div>
 
                 <!-- 照片上传区域 -->
+                <!--
+                    WebView 关键兼容方案：
+                    使用 <label for="inputId"> 替代 <button> + JS .click()。
+                    原因：Android WebView 中，JS 调用 input.click() 经常被静默拦截，
+                    但 <label> 的原生 HTML 关联行为（点击 label = 点击 input）不受此限制。
+                    这是跨所有 WebView 实现最可靠的触发 file input 的方式。
+                -->
                 <div class="photo-upload-area">
                     <div class="upload-buttons d-flex gap-2 mb-3">
-                        <button class="btn btn-primary flex-fill" id="btn-camera">
+                        <label for="camera-input" class="btn btn-primary flex-fill mb-0" id="btn-camera" role="button">
                             <i class="bi bi-camera-fill me-2"></i>拍照
-                        </button>
-                        <button class="btn btn-outline-primary flex-fill" id="btn-gallery">
+                        </label>
+                        <label for="photo-input" class="btn btn-outline-primary flex-fill mb-0" id="btn-gallery" role="button">
                             <i class="bi bi-image me-2"></i>相册
-                        </button>
+                        </label>
                     </div>
-                    <input type="file" id="photo-input" accept="image/*" multiple style="display: none;">
-                    <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+                    <input type="file" id="camera-input" accept="image/*" capture="environment"
+                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;">
+                    <input type="file" id="photo-input" accept="image/*" multiple
+                           style="position:absolute;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;">
                 </div>
 
                 <!-- 已选照片预览 -->
@@ -226,6 +235,15 @@
 .item-status.pending {
     background: var(--bs-warning);
     color: #000;
+}
+
+.item-status.pending-review {
+    background: var(--bs-info);
+    color: white;
+}
+
+.inspection-item.pending-review {
+    border-color: var(--bs-info);
 }
 
 .item-status.overdue {

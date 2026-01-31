@@ -1,6 +1,6 @@
 -- PMAT 数据更新脚本 (基于 配方数据_去重.xlsx / 原料列表.xlsx / 最新PMAT码规则)
 START TRANSACTION;
-UPDATE kds_sop_query_rules SET config_json = '{"mapping": {"a": "A", "m": "M", "p": "P", "t": "T", "ord": "ORD"}, "template": "{P}-B0{A}-W0{M}-T0{T}"}' WHERE id = 1;
+UPDATE kds_sop_query_rules SET config_json = '{"mapping": {"a": "A", "m": "M", "p": "P", "t": "T", "ord": "ORD"}, "template": "{P}-{M}-{A}-{T}"}' WHERE id = 1;
 UPDATE kds_cups SET cup_name = '700cc', sop_description_zh = '700cc' WHERE id = 1;
 UPDATE kds_cups SET cup_name = '500cc', sop_description_zh = '500cc' WHERE id = 2;
 INSERT INTO kds_ice_options (id, ice_code, created_at, updated_at, deleted_at) VALUES (5, 5, utc_timestamp(6), utc_timestamp(6), NULL) ON DUPLICATE KEY UPDATE ice_code = VALUES(ice_code), deleted_at = NULL, updated_at = utc_timestamp(6);

@@ -83,6 +83,11 @@ $expiry_rule_map = [
                                     ?>
                                 </td>
                                 <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-info usage-material-btn"
+                                            data-material-id="<?php echo $material['id']; ?>"
+                                            title="查询用途">
+                                        用途
+                                    </button>
                                     <button class="btn btn-sm btn-outline-primary edit-material-btn" 
                                             data-material-id="<?php echo $material['id']; ?>"
                                             data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
@@ -230,5 +235,34 @@ $expiry_rule_map = [
                 <button type="submit" class="btn btn-primary">保存</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Usage Modal -->
+<div class="modal fade" id="usage-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">物料用途查询</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="usage-loading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="usage-results" style="display: none;">
+                    <p id="usage-summary" class="mb-2"></p>
+                    <ul class="list-group" id="usage-list">
+                        <!-- Items will be injected here -->
+                    </ul>
+                </div>
+                <div id="usage-error" class="alert alert-danger" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
     </div>
 </div>

@@ -7,10 +7,10 @@
  * Revision: 1.2.010 (3-Level-Unit Support)
  */
 $(document).ready(function() {
-    
+
     // --- 新的 API 网关入口 ---
     const API_GATEWAY_URL = 'api/cpsys_api_gateway.php';
-    
+
     // --- START: Search/Filter Logic (无变化) ---
     const searchInput = $('#material-search-input');
     const typeFilter = $('#material-type-filter');
@@ -89,9 +89,9 @@ $(document).ready(function() {
             // --- MODIFIED ---
             url: API_GATEWAY_URL,
             type: 'GET',
-            data: { 
+            data: {
                 res: 'materials',
-                act: 'get_next_code' 
+                act: 'get_next_code'
             },
             dataType: 'json',
             // --- END MOD ---
@@ -103,6 +103,69 @@ $(document).ready(function() {
         });
     });
 
+    // --- START: Usage Query Logic ---
+    const usageModalEl = document.getElementById('usage-modal');
+    // Check if element exists before initializing
+    let usageModal = null;
+    if (usageModalEl) {
+        usageModal = new bootstrap.Modal(usageModalEl);
+    }
+    const usageList = $('#usage-list');
+    const usageLoading = $('#usage-loading');
+    const usageResults = $('#usage-results');
+    const usageError = $('#usage-error');
+    const usageSummary = $('#usage-summary');
+
+    $('.table').on('click', '.usage-material-btn', function() {
+        if (!usageModal) return;
+        const materialId = $(this).data('material-id');
+
+        // Reset Modal State
+        usageLoading.show();
+        usageResults.hide();
+        usageError.hide();
+        usageList.empty();
+        usageModal.show();
+
+        $.ajax({
+            url: API_GATEWAY_URL,
+            type: 'GET',
+            data: {
+                res: 'materials',
+                act: 'get_usage',
+                id: materialId
+            },
+            dataType: 'json',
+            success: function(response) {
+                usageLoading.hide();
+                if (response.status === 'success') {
+                    const products = response.data;
+                    if (products.length > 0) {
+                        usageSummary.text(`该物料用于 ${products.length} 款产品：`);
+                        products.forEach(p => {
+                            const li = $('<li>').addClass('list-group-item d-flex justify-content-between align-items-center');
+                            li.html(`
+                                <span><span class="badge bg-secondary me-2">${p.product_code}</span>${p.name_zh}</span>
+                            `);
+                            usageList.append(li);
+                        });
+                        usageResults.show();
+                    } else {
+                        usageSummary.text('没有找到使用该物料的产品。');
+                        usageResults.show();
+                    }
+                } else {
+                    usageError.text('查询失败: ' + response.message).show();
+                }
+            },
+            error: function() {
+                usageLoading.hide();
+                usageError.text('网络请求失败。').show();
+            }
+        });
+    });
+    // --- END: Usage Query Logic ---
+
     $('.table').on('click', '.edit-material-btn', function() {
         const materialId = $(this).data('material-id');
         drawerLabel.text('编辑物料');
@@ -113,10 +176,10 @@ $(document).ready(function() {
             // --- MODIFIED ---
             url: API_GATEWAY_URL,
             type: 'GET',
-            data: { 
+            data: {
                 res: 'materials',
                 act: 'get',
-                id: materialId 
+                id: materialId
             },
             dataType: 'json',
             // --- END MOD ---
@@ -198,7 +261,7 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     $('.table').on('click', '.delete-material-btn', function() {
         const materialId = $(this).data('material-id');
         const materialName = $(this).data('material-name');

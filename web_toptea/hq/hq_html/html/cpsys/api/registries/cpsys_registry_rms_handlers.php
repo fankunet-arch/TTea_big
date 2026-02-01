@@ -109,7 +109,7 @@ function cprms_material_save(PDO $pdo, array $config, array $input_data): void {
             $stmt_trans->execute([$name_es, $id, 'es-ES']);
 
             $pdo->commit();
-            
+
             // [R2] 审计：写入日志
             $data_after = getMaterialById($pdo, $id);
             log_audit_action($pdo, $action_name, 'kds_materials', $id, $data_before, $data_after);
@@ -175,7 +175,7 @@ function cprms_material_save(PDO $pdo, array $config, array $input_data): void {
             }
 
             $pdo->commit();
-            
+
             // [R2] 审计：写入日志
             $data_after = getMaterialById($pdo, $id);
             log_audit_action($pdo, $action_name, 'kds_materials', $id, $data_before, $data_after);
@@ -210,6 +210,27 @@ function cprms_material_delete(PDO $pdo, array $config, array $input_data): void
 function cprms_material_get_next_code(PDO $pdo, array $config, array $input_data): void {
     $next_code = getNextAvailableCustomCode($pdo, 'kds_materials', 'material_code');
     json_ok(['next_code' => $next_code], '下一个可用编号已找到。');
+}
+
+function cprms_material_get_usage(PDO $pdo, array $config, array $input_data): void {
+    $id = $_GET['id'] ?? json_error('缺少 id 参数', 400);
+    $materialId = (int)$id;
+
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT p.id, p.product_code,
+               COALESCE(tzh.product_name, 'Unknown') as name_zh
+        FROM kds_products p
+        JOIN kds_product_translations tzh ON p.id = tzh.product_id AND tzh.language_code = 'zh-CN'
+        LEFT JOIN kds_product_recipes r ON p.id = r.product_id
+        LEFT JOIN kds_recipe_adjustments a ON p.id = a.product_id
+        WHERE p.deleted_at IS NULL
+          AND (r.material_id = ? OR a.material_id = ?)
+        ORDER BY p.product_code ASC
+    ");
+    $stmt->execute([$materialId, $materialId]);
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    json_ok($products, '关联产品查询成功。');
 }
 
 /* [2026-01-26 后台重构] 移除总仓库存 cprms_stock_actions 函数，改用 cpsys_registry_stock.php */
@@ -398,7 +419,7 @@ function cprms_product_get_details_snapshot(PDO $pdo, int $productId): ?array {
     $stmt_ice = $pdo->prepare("SELECT ice_option_id FROM kds_product_ice_options WHERE product_id=?");
     $stmt_ice->execute([$productId]);
     $base['allowed_ice_ids'] = $stmt_ice->fetchAll(PDO::FETCH_COLUMN);
-    
+
     return $base;
 }
 
@@ -496,7 +517,7 @@ function cprms_product_save(PDO $pdo, array $config, array $input_data): void {
         }
 
         $pdo->commit();
-        
+
         // [R2] 审计：写入日志
         $data_after = cprms_product_get_details_snapshot($pdo, $productId);
         log_audit_action($pdo, $action_name, 'kds_products', $productId, $data_before, $data_after);
@@ -542,10 +563,10 @@ function cprms_products_get_list(PDO $pdo, array $config, array $input_data): vo
     // 1. 获取所有 POS 菜单项 (已包含分类信息)
     // 注意：kds_repo_b.php 中的 getAllMenuItems 包含已删除项，此处需过滤
     $all_menu_items = getAllMenuItems($pdo, null); // store_id=null 表示获取所有
-    
+
     // 2. 获取所有 POS 变体
     $sql_variants = "
-        SELECT 
+        SELECT
             v.*,
             p.product_code AS kds_product_code,
             c.cup_code
@@ -556,10 +577,10 @@ function cprms_products_get_list(PDO $pdo, array $config, array $input_data): vo
         WHERE v.deleted_at IS NULL AND mi.deleted_at IS NULL
     ";
     $variants = $pdo->query($sql_variants)->fetchAll(PDO::FETCH_ASSOC | PDO::FETCH_GROUP);
-    
+
     // 3. 获取所有 POS 商品标签映射
     $sql_tags = "
-        SELECT 
+        SELECT
             ptm.product_id,
             t.tag_code
         FROM pos_product_tag_map ptm
@@ -574,9 +595,9 @@ function cprms_products_get_list(PDO $pdo, array $config, array $input_data): vo
         if ($item['deleted_at'] !== null) {
             continue;
         }
-        
+
         $item_id = $item['id'];
-        
+
         // 组装变体
         $item_variants = [];
         if (isset($variants[$item_id])) {
@@ -592,7 +613,7 @@ function cprms_products_get_list(PDO $pdo, array $config, array $input_data): vo
                 ];
             }
         }
-        
+
         // 组装标签
         $item_tags = [];
         if (isset($tags[$item_id])) {
@@ -634,7 +655,7 @@ function cprms_recipes_get(PDO $pdo, array $config, array $input_data): void {
     }
 
     $data = getRecipeByProductCode($pdo, $product_code);
-    
+
     if ($data) {
         json_ok($data, '配方加载成功。');
     } else {

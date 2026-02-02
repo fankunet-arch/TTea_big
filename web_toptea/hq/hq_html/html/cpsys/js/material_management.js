@@ -7,27 +7,34 @@
  * Revision: 1.2.010 (3-Level-Unit Support)
  */
 $(document).ready(function() {
-    
+
     // --- 新的 API 网关入口 ---
     const API_GATEWAY_URL = 'api/cpsys_api_gateway.php';
-    
+
     // --- START: Search/Filter Logic (无变化) ---
     const searchInput = $('#material-search-input');
     const typeFilter = $('#material-type-filter');
+    const showInactiveToggle = $('#show-inactive-toggle');
     const tableBody = $('#materials-table-body');
     const noDataRow = $('#no-matching-row');
 
     function filterMaterials() {
         const searchTerm = searchInput.val().toLowerCase();
         const filterType = typeFilter.val();
+        const showInactive = showInactiveToggle.is(':checked');
         let hasVisibleRows = false;
+
         tableBody.find('tr[data-name]').each(function() {
             const $row = $(this);
             const name = $row.data('name') || '';
             const type = $row.data('type') || '';
+            const isActive = parseInt($row.data('active')) === 1;
+
             const nameMatch = name.includes(searchTerm);
             const typeMatch = (filterType === 'ALL' || filterType === type);
-            if (nameMatch && typeMatch) {
+            const activeMatch = showInactive ? true : isActive;
+
+            if (nameMatch && typeMatch && activeMatch) {
                 $row.show();
                 hasVisibleRows = true;
             } else {
@@ -44,6 +51,7 @@ $(document).ready(function() {
     }
     searchInput.on('keyup', filterMaterials);
     typeFilter.on('change', filterMaterials);
+    showInactiveToggle.on('change', filterMaterials);
     // --- END: Search/Filter Logic ---
 
 
@@ -52,6 +60,7 @@ $(document).ready(function() {
     const drawerLabel = $('#drawer-label');
     const materialIdInput = $('#material-id');
     const materialCodeInput = $('#material-code');
+    const materialIsActiveInput = $('#material-is-active');
     const materialTypeInput = $('#material-type');
     const materialNameZhInput = $('#material-name-zh');
     const materialNameEsInput = $('#material-name-es');
@@ -83,15 +92,16 @@ $(document).ready(function() {
         drawerLabel.text('创建新物料');
         form[0].reset();
         materialIdInput.val('');
+        materialIsActiveInput.prop('checked', true); // Default checked for new
         materialTypeInput.val('SEMI_FINISHED');
         expiryRuleTypeInput.trigger('change');
         $.ajax({
             // --- MODIFIED ---
             url: API_GATEWAY_URL,
             type: 'GET',
-            data: { 
+            data: {
                 res: 'materials',
-                act: 'get_next_code' 
+                act: 'get_next_code'
             },
             dataType: 'json',
             // --- END MOD ---
@@ -103,6 +113,136 @@ $(document).ready(function() {
         });
     });
 
+    // --- START: Usage Query Logic ---
+    const usageModalEl = document.getElementById('usage-modal');
+    // Check if element exists before initializing
+    let usageModal = null;
+    if (usageModalEl) {
+        usageModal = new bootstrap.Modal(usageModalEl);
+    }
+    const usageList = $('#usage-list');
+    const usageLoading = $('#usage-loading');
+    const usageResults = $('#usage-results');
+    const usageError = $('#usage-error');
+    const usageSummary = $('#usage-summary');
+
+    $('.table').on('click', '.usage-material-btn', function() {
+        if (!usageModal) return;
+        const materialId = $(this).data('material-id');
+
+        // Reset Modal State
+        usageLoading.show();
+        usageResults.hide();
+        usageError.hide();
+        usageList.empty();
+        usageModal.show();
+
+        $.ajax({
+            url: API_GATEWAY_URL,
+            type: 'GET',
+            data: {
+                res: 'materials',
+                act: 'get_usage',
+                id: materialId
+            },
+            dataType: 'json',
+            success: function(response) {
+                usageLoading.hide();
+                if (response.status === 'success') {
+                    const products = response.data;
+                    if (products.length > 0) {
+                        usageSummary.text(`该物料用于 ${products.length} 款产品：`);
+                        products.forEach(p => {
+                            const li = $('<li>').addClass('list-group-item d-flex justify-content-between align-items-center');
+                            li.html(`
+                                <span><span class="badge bg-secondary me-2">${p.product_code}</span>${p.name_zh}</span>
+                            `);
+                            usageList.append(li);
+                        });
+                        usageResults.show();
+                    } else {
+                        usageSummary.text('没有找到使用该物料的产品。');
+                        usageResults.show();
+                    }
+                } else {
+                    usageError.text('查询失败: ' + response.message).show();
+                }
+            },
+            error: function() {
+                usageLoading.hide();
+                usageError.text('网络请求失败。').show();
+            }
+        });
+    });
+    // --- END: Usage Query Logic ---
+
+    // --- START: Orphaned Check Logic ---
+    const orphanedModalEl = document.getElementById('orphaned-modal');
+    let orphanedModal = null;
+    if (orphanedModalEl) {
+        orphanedModal = new bootstrap.Modal(orphanedModalEl);
+    }
+    const orphanedLoading = $('#orphaned-loading');
+    const orphanedResults = $('#orphaned-results');
+    const orphanedEmpty = $('#orphaned-empty');
+    const orphanedError = $('#orphaned-error');
+    const orphanedTableBody = $('#orphaned-table-body');
+
+    $('#check-orphaned-btn').on('click', function() {
+        if (!orphanedModal) return;
+
+        // Reset
+        orphanedLoading.show();
+        orphanedResults.hide();
+        orphanedEmpty.hide();
+        orphanedError.hide();
+        orphanedTableBody.empty();
+        orphanedModal.show();
+
+        $.ajax({
+            url: API_GATEWAY_URL,
+            type: 'GET',
+            data: {
+                res: 'materials',
+                act: 'get_orphaned'
+            },
+            dataType: 'json',
+            success: function(response) {
+                orphanedLoading.hide();
+                if (response.status === 'success') {
+                    const data = response.data;
+                    if (data.length > 0) {
+                        data.forEach(item => {
+                            let refHtml = '<ul class="list-unstyled mb-0 small">';
+                            item.references.forEach(ref => {
+                                refHtml += `<li><span class="badge bg-light text-dark border me-1">${ref.product_code}</span> ${ref.product_name} <span class="text-muted">(${ref.source})</span></li>`;
+                            });
+                            refHtml += '</ul>';
+
+                            const tr = `
+                                <tr>
+                                    <td class="text-danger fw-bold text-center align-middle">${item.material_id}</td>
+                                    <td>${refHtml}</td>
+                                </tr>
+                            `;
+                            orphanedTableBody.append(tr);
+                        });
+                        orphanedResults.show();
+                    } else {
+                        orphanedEmpty.show();
+                    }
+                } else {
+                    orphanedError.text('检查失败: ' + response.message).show();
+                }
+            },
+            error: function() {
+                orphanedLoading.hide();
+                orphanedError.text('网络请求失败。').show();
+            }
+        });
+    });
+    // --- END: Orphaned Check Logic ---
+
     $('.table').on('click', '.edit-material-btn', function() {
         const materialId = $(this).data('material-id');
         drawerLabel.text('编辑物料');
@@ -113,10 +253,10 @@ $(document).ready(function() {
             // --- MODIFIED ---
             url: API_GATEWAY_URL,
             type: 'GET',
-            data: { 
+            data: {
                 res: 'materials',
                 act: 'get',
-                id: materialId 
+                id: materialId
             },
             dataType: 'json',
             // --- END MOD ---
@@ -124,6 +264,9 @@ $(document).ready(function() {
                 if (response.status === 'success') {
                     const data = response.data;
                     materialCodeInput.val(data.material_code);
+                    // Handle is_active (default to true if undefined)
+                    const isActive = (data.is_active !== undefined && data.is_active !== null) ? parseInt(data.is_active) : 1;
+                    materialIsActiveInput.prop('checked', isActive === 1);
                     materialTypeInput.val(data.material_type);
                     materialNameZhInput.val(data.name_zh);
                     materialNameEsInput.val(data.name_es);
@@ -155,6 +298,7 @@ $(document).ready(function() {
         const materialData = {
             id: materialIdInput.val(),
             material_code: materialCodeInput.val(),
+            is_active: materialIsActiveInput.is(':checked') ? 1 : 0,
             material_type: materialTypeInput.val(),
             name_zh: materialNameZhInput.val(),
             name_es: materialNameEsInput.val(),
@@ -198,7 +342,7 @@ $(document).ready(function() {
             }
         });
     });
-    
+
     $('.table').on('click', '.delete-material-btn', function() {
         const materialId = $(this).data('material-id');
         const materialName = $(this).data('material-name');

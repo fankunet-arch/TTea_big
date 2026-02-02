@@ -26,10 +26,19 @@ $expiry_rule_map = [
                 <?php endforeach; ?>
             </select>
         </div>
+        <div class="form-check form-switch align-self-center ms-2">
+            <input class="form-check-input" type="checkbox" id="show-inactive-toggle">
+            <label class="form-check-label text-nowrap" for="show-inactive-toggle">显示下架</label>
+        </div>
     </div>
-    <button class="btn btn-primary" id="create-material-btn" data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
-        <i class="bi bi-plus-circle me-2"></i>创建新物料
-    </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-warning" id="check-orphaned-btn">
+            <i class="bi bi-exclamation-triangle me-2"></i>反向核查
+        </button>
+        <button class="btn btn-primary" id="create-material-btn" data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
+            <i class="bi bi-plus-circle me-2"></i>创建新物料
+        </button>
+    </div>
 </div>
 
 <div class="card">
@@ -54,26 +63,38 @@ $expiry_rule_map = [
                             <td colspan="5" class="text-center">暂无物料数据。</td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($materials as $material): ?>
-                            <tr data-type="<?php echo htmlspecialchars($material['material_type']); ?>" data-name="<?php echo htmlspecialchars(strtolower($material['name_zh'])); ?>">
-                                <td><strong><?php echo htmlspecialchars($material['material_code']); ?></strong></td>
-                                <td class="material-name"><?php echo htmlspecialchars($material['name_zh']); ?></td>
+                        <?php foreach ($materials as $material):
+                            $is_active = isset($material['is_active']) ? (int)$material['is_active'] : 1;
+                        ?>
+                            <tr data-type="<?php echo htmlspecialchars($material['material_type']); ?>"
+                                data-name="<?php echo htmlspecialchars(strtolower($material['name_zh'])); ?>"
+                                data-active="<?php echo $is_active; ?>"
+                                style="<?php echo ($is_active === 0) ? 'display: none; background-color: #f8f9fa; color: #6c757d;' : ''; ?>">
                                 <td>
-                                    <span class="badge text-bg-info"><?php echo $material_type_map[$material['material_type']] ?? '未知'; ?></span>
+                                    <strong><?php echo htmlspecialchars($material['material_code']); ?></strong>
+                                </td>
+                                <td class="material-name">
+                                    <?php echo htmlspecialchars($material['name_zh']); ?>
+                                    <?php if ($is_active === 0): ?>
+                                        <span class="badge bg-secondary ms-2">已下架</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td>
-                                    <?php 
+                                    <span class="badge <?php echo ($is_active === 0) ? 'bg-secondary' : 'text-bg-info'; ?>"><?php echo $material_type_map[$material['material_type']] ?? '未知'; ?></span>
+                                </td>
+                                <td>
+                                    <?php
                                         // [MODIFIED] 3-Level Display
                                         if (!empty($material['large_unit_name']) && !empty($material['medium_unit_name']) && !empty($material['base_unit_name'])) {
                                             $med_total = (float)($material['medium_conversion_rate'] ?? 0);
                                             $large_total = (float)($material['large_conversion_rate'] ?? 0) * $med_total;
-                                            
+
                                             echo '1 ' . htmlspecialchars($material['large_unit_name']) . ' = ' . htmlspecialchars($material['large_conversion_rate'] ?? 'N/A') . ' ' . htmlspecialchars($material['medium_unit_name']);
                                             echo ' <small class="text-muted">(' . htmlspecialchars($large_total) . ' ' . htmlspecialchars($material['base_unit_name']) . ')</small>';
-                                        
+
                                         } elseif (!empty($material['medium_unit_name']) && !empty($material['base_unit_name'])) {
                                             echo '1 ' . htmlspecialchars($material['medium_unit_name']) . ' = ' . htmlspecialchars($material['medium_conversion_rate'] ?? 'N/A') . ' ' . htmlspecialchars($material['base_unit_name']);
-                                        
+
                                         } elseif (!empty($material['base_unit_name'])) {
                                             echo htmlspecialchars($material['base_unit_name']);
                                         } else {
@@ -83,7 +104,12 @@ $expiry_rule_map = [
                                     ?>
                                 </td>
                                 <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-primary edit-material-btn" 
+                                    <button class="btn btn-sm btn-outline-info usage-material-btn"
+                                            data-material-id="<?php echo $material['id']; ?>"
+                                            title="查询用途">
+                                        用途
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary edit-material-btn"
                                             data-material-id="<?php echo $material['id']; ?>"
                                             data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
                                         编辑
@@ -118,6 +144,12 @@ $expiry_rule_map = [
                 <input type="number" class="form-control" id="material-code" name="material_code" required>
             </div>
 
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="material-is-active" name="is_active" value="1" checked>
+                <label class="form-check-label" for="material-is-active">启用状态 (上架)</label>
+                <div class="form-text">取消勾选即将该物料“下架”，下架后默认不显示，且无法入库。</div>
+            </div>
+
             <div class="mb-3">
                 <label for="material-type" class="form-label">物料类型 <span class="text-danger">*</span></label>
                 <select class="form-select" id="material-type" name="material_type" required>
@@ -141,7 +173,7 @@ $expiry_rule_map = [
                 <label for="material-name-zh" class="form-label">物料名称 (中) <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="material-name-zh" name="material_name_zh" required>
             </div>
-            
+
             <div class="mb-3">
                 <label for="material-name-es" class="form-label">物料名称 (西) <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="material-name-es" name="material_name_es" required>
@@ -230,5 +262,79 @@ $expiry_rule_map = [
                 <button type="submit" class="btn btn-primary">保存</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Orphaned Check Modal -->
+<div class="modal fade" id="orphaned-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">配方完整性反向核查</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    此列表显示了在配方中被引用，但在当前“物料管理”列表中不存在（或已被删除）的物料ID。
+                </div>
+                <div id="orphaned-loading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="orphaned-results" style="display: none;">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr class="table-secondary">
+                                    <th style="width: 100px;">缺失物料ID</th>
+                                    <th>受影响的产品 (Code - Name - Source)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orphaned-table-body">
+                                <!-- Items will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="orphaned-empty" class="alert alert-success text-center" style="display: none;">
+                    <i class="bi bi-check-circle-fill me-2"></i> 太棒了！没有发现缺失的物料引用。
+                </div>
+                <div id="orphaned-error" class="alert alert-danger" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Usage Modal -->
+<div class="modal fade" id="usage-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">物料用途查询</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="usage-loading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="usage-results" style="display: none;">
+                    <p id="usage-summary" class="mb-2"></p>
+                    <ul class="list-group" id="usage-list">
+                        <!-- Items will be injected here -->
+                    </ul>
+                </div>
+                <div id="usage-error" class="alert alert-danger" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
     </div>
 </div>

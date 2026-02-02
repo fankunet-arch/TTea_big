@@ -14,27 +14,20 @@ $(document).ready(function() {
     // --- START: Search/Filter Logic (无变化) ---
     const searchInput = $('#material-search-input');
     const typeFilter = $('#material-type-filter');
-    const showInactiveToggle = $('#show-inactive-toggle');
     const tableBody = $('#materials-table-body');
     const noDataRow = $('#no-matching-row');
 
     function filterMaterials() {
         const searchTerm = searchInput.val().toLowerCase();
         const filterType = typeFilter.val();
-        const showInactive = showInactiveToggle.is(':checked');
         let hasVisibleRows = false;
-
         tableBody.find('tr[data-name]').each(function() {
             const $row = $(this);
             const name = $row.data('name') || '';
             const type = $row.data('type') || '';
-            const isActive = parseInt($row.data('active')) === 1;
-
             const nameMatch = name.includes(searchTerm);
             const typeMatch = (filterType === 'ALL' || filterType === type);
-            const activeMatch = showInactive ? true : isActive;
-
-            if (nameMatch && typeMatch && activeMatch) {
+            if (nameMatch && typeMatch) {
                 $row.show();
                 hasVisibleRows = true;
             } else {
@@ -51,7 +44,6 @@ $(document).ready(function() {
     }
     searchInput.on('keyup', filterMaterials);
     typeFilter.on('change', filterMaterials);
-    showInactiveToggle.on('change', filterMaterials);
     // --- END: Search/Filter Logic ---
 
 
@@ -60,7 +52,6 @@ $(document).ready(function() {
     const drawerLabel = $('#drawer-label');
     const materialIdInput = $('#material-id');
     const materialCodeInput = $('#material-code');
-    const materialIsActiveInput = $('#material-is-active');
     const materialTypeInput = $('#material-type');
     const materialNameZhInput = $('#material-name-zh');
     const materialNameEsInput = $('#material-name-es');
@@ -92,7 +83,6 @@ $(document).ready(function() {
         drawerLabel.text('创建新物料');
         form[0].reset();
         materialIdInput.val('');
-        materialIsActiveInput.prop('checked', true); // Default checked for new
         materialTypeInput.val('SEMI_FINISHED');
         expiryRuleTypeInput.trigger('change');
         $.ajax({
@@ -264,9 +254,6 @@ $(document).ready(function() {
                 if (response.status === 'success') {
                     const data = response.data;
                     materialCodeInput.val(data.material_code);
-                    // Handle is_active (default to true if undefined)
-                    const isActive = (data.is_active !== undefined && data.is_active !== null) ? parseInt(data.is_active) : 1;
-                    materialIsActiveInput.prop('checked', isActive === 1);
                     materialTypeInput.val(data.material_type);
                     materialNameZhInput.val(data.name_zh);
                     materialNameEsInput.val(data.name_es);
@@ -298,7 +285,6 @@ $(document).ready(function() {
         const materialData = {
             id: materialIdInput.val(),
             material_code: materialCodeInput.val(),
-            is_active: materialIsActiveInput.is(':checked') ? 1 : 0,
             material_type: materialTypeInput.val(),
             name_zh: materialNameZhInput.val(),
             name_es: materialNameEsInput.val(),

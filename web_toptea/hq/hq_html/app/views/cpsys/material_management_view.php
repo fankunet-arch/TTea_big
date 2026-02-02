@@ -26,10 +26,6 @@ $expiry_rule_map = [
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="form-check form-switch align-self-center ms-2">
-            <input class="form-check-input" type="checkbox" id="show-inactive-toggle">
-            <label class="form-check-label text-nowrap" for="show-inactive-toggle">显示下架</label>
-        </div>
     </div>
     <div class="d-flex gap-2">
         <button class="btn btn-outline-warning" id="check-orphaned-btn">
@@ -63,38 +59,26 @@ $expiry_rule_map = [
                             <td colspan="5" class="text-center">暂无物料数据。</td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($materials as $material):
-                            $is_active = isset($material['is_active']) ? (int)$material['is_active'] : 1;
-                        ?>
-                            <tr data-type="<?php echo htmlspecialchars($material['material_type']); ?>"
-                                data-name="<?php echo htmlspecialchars(strtolower($material['name_zh'])); ?>"
-                                data-active="<?php echo $is_active; ?>"
-                                style="<?php echo ($is_active === 0) ? 'display: none; background-color: #f8f9fa; color: #6c757d;' : ''; ?>">
+                        <?php foreach ($materials as $material): ?>
+                            <tr data-type="<?php echo htmlspecialchars($material['material_type']); ?>" data-name="<?php echo htmlspecialchars(strtolower($material['name_zh'])); ?>">
+                                <td><strong><?php echo htmlspecialchars($material['material_code']); ?></strong></td>
+                                <td class="material-name"><?php echo htmlspecialchars($material['name_zh']); ?></td>
                                 <td>
-                                    <strong><?php echo htmlspecialchars($material['material_code']); ?></strong>
-                                </td>
-                                <td class="material-name">
-                                    <?php echo htmlspecialchars($material['name_zh']); ?>
-                                    <?php if ($is_active === 0): ?>
-                                        <span class="badge bg-secondary ms-2">已下架</span>
-                                    <?php endif; ?>
+                                    <span class="badge text-bg-info"><?php echo $material_type_map[$material['material_type']] ?? '未知'; ?></span>
                                 </td>
                                 <td>
-                                    <span class="badge <?php echo ($is_active === 0) ? 'bg-secondary' : 'text-bg-info'; ?>"><?php echo $material_type_map[$material['material_type']] ?? '未知'; ?></span>
-                                </td>
-                                <td>
-                                    <?php
+                                    <?php 
                                         // [MODIFIED] 3-Level Display
                                         if (!empty($material['large_unit_name']) && !empty($material['medium_unit_name']) && !empty($material['base_unit_name'])) {
                                             $med_total = (float)($material['medium_conversion_rate'] ?? 0);
                                             $large_total = (float)($material['large_conversion_rate'] ?? 0) * $med_total;
-
+                                            
                                             echo '1 ' . htmlspecialchars($material['large_unit_name']) . ' = ' . htmlspecialchars($material['large_conversion_rate'] ?? 'N/A') . ' ' . htmlspecialchars($material['medium_unit_name']);
                                             echo ' <small class="text-muted">(' . htmlspecialchars($large_total) . ' ' . htmlspecialchars($material['base_unit_name']) . ')</small>';
-
+                                        
                                         } elseif (!empty($material['medium_unit_name']) && !empty($material['base_unit_name'])) {
                                             echo '1 ' . htmlspecialchars($material['medium_unit_name']) . ' = ' . htmlspecialchars($material['medium_conversion_rate'] ?? 'N/A') . ' ' . htmlspecialchars($material['base_unit_name']);
-
+                                        
                                         } elseif (!empty($material['base_unit_name'])) {
                                             echo htmlspecialchars($material['base_unit_name']);
                                         } else {
@@ -109,7 +93,7 @@ $expiry_rule_map = [
                                             title="查询用途">
                                         用途
                                     </button>
-                                    <button class="btn btn-sm btn-outline-primary edit-material-btn"
+                                    <button class="btn btn-sm btn-outline-primary edit-material-btn" 
                                             data-material-id="<?php echo $material['id']; ?>"
                                             data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
                                         编辑
@@ -144,12 +128,6 @@ $expiry_rule_map = [
                 <input type="number" class="form-control" id="material-code" name="material_code" required>
             </div>
 
-            <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" id="material-is-active" name="is_active" value="1" checked>
-                <label class="form-check-label" for="material-is-active">启用状态 (上架)</label>
-                <div class="form-text">取消勾选即将该物料“下架”，下架后默认不显示，且无法入库。</div>
-            </div>
-
             <div class="mb-3">
                 <label for="material-type" class="form-label">物料类型 <span class="text-danger">*</span></label>
                 <select class="form-select" id="material-type" name="material_type" required>
@@ -173,7 +151,7 @@ $expiry_rule_map = [
                 <label for="material-name-zh" class="form-label">物料名称 (中) <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="material-name-zh" name="material_name_zh" required>
             </div>
-
+            
             <div class="mb-3">
                 <label for="material-name-es" class="form-label">物料名称 (西) <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" id="material-name-es" name="material_name_es" required>

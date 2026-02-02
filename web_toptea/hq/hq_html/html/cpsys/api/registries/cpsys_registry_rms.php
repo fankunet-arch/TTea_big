@@ -45,6 +45,7 @@ return [
             'delete'         => 'cprms_material_delete',
             'get_next_code'  => 'cprms_material_get_next_code',
             'get_usage'      => 'cprms_material_get_usage',
+            'get_orphaned'   => 'cprms_material_get_orphaned',
         ],
     ],
 

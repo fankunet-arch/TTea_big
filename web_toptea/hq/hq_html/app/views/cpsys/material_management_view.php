@@ -27,9 +27,14 @@ $expiry_rule_map = [
             </select>
         </div>
     </div>
-    <button class="btn btn-primary" id="create-material-btn" data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
-        <i class="bi bi-plus-circle me-2"></i>创建新物料
-    </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-warning" id="check-orphaned-btn">
+            <i class="bi bi-exclamation-triangle me-2"></i>反向核查
+        </button>
+        <button class="btn btn-primary" id="create-material-btn" data-bs-toggle="offcanvas" data-bs-target="#material-drawer">
+            <i class="bi bi-plus-circle me-2"></i>创建新物料
+        </button>
+    </div>
 </div>
 
 <div class="card">
@@ -235,6 +240,51 @@ $expiry_rule_map = [
                 <button type="submit" class="btn btn-primary">保存</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Orphaned Check Modal -->
+<div class="modal fade" id="orphaned-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">配方完整性反向核查</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    此列表显示了在配方中被引用，但在当前“物料管理”列表中不存在（或已被删除）的物料ID。
+                </div>
+                <div id="orphaned-loading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="orphaned-results" style="display: none;">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr class="table-secondary">
+                                    <th style="width: 100px;">缺失物料ID</th>
+                                    <th>受影响的产品 (Code - Name - Source)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orphaned-table-body">
+                                <!-- Items will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="orphaned-empty" class="alert alert-success text-center" style="display: none;">
+                    <i class="bi bi-check-circle-fill me-2"></i> 太棒了！没有发现缺失的物料引用。
+                </div>
+                <div id="orphaned-error" class="alert alert-danger" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
     </div>
 </div>
 

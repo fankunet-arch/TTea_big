@@ -166,6 +166,73 @@ $(document).ready(function() {
     });
     // --- END: Usage Query Logic ---
 
+    // --- START: Orphaned Check Logic ---
+    const orphanedModalEl = document.getElementById('orphaned-modal');
+    let orphanedModal = null;
+    if (orphanedModalEl) {
+        orphanedModal = new bootstrap.Modal(orphanedModalEl);
+    }
+    const orphanedLoading = $('#orphaned-loading');
+    const orphanedResults = $('#orphaned-results');
+    const orphanedEmpty = $('#orphaned-empty');
+    const orphanedError = $('#orphaned-error');
+    const orphanedTableBody = $('#orphaned-table-body');
+
+    $('#check-orphaned-btn').on('click', function() {
+        if (!orphanedModal) return;
+
+        // Reset
+        orphanedLoading.show();
+        orphanedResults.hide();
+        orphanedEmpty.hide();
+        orphanedError.hide();
+        orphanedTableBody.empty();
+        orphanedModal.show();
+
+        $.ajax({
+            url: API_GATEWAY_URL,
+            type: 'GET',
+            data: {
+                res: 'materials',
+                act: 'get_orphaned'
+            },
+            dataType: 'json',
+            success: function(response) {
+                orphanedLoading.hide();
+                if (response.status === 'success') {
+                    const data = response.data;
+                    if (data.length > 0) {
+                        data.forEach(item => {
+                            let refHtml = '<ul class="list-unstyled mb-0 small">';
+                            item.references.forEach(ref => {
+                                refHtml += `<li><span class="badge bg-light text-dark border me-1">${ref.product_code}</span> ${ref.product_name} <span class="text-muted">(${ref.source})</span></li>`;
+                            });
+                            refHtml += '</ul>';
+
+                            const tr = `
+                                <tr>
+                                    <td class="text-danger fw-bold text-center align-middle">${item.material_id}</td>
+                                    <td>${refHtml}</td>
+                                </tr>
+                            `;
+                            orphanedTableBody.append(tr);
+                        });
+                        orphanedResults.show();
+                    } else {
+                        orphanedEmpty.show();
+                    }
+                } else {
+                    orphanedError.text('检查失败: ' + response.message).show();
+                }
+            },
+            error: function() {
+                orphanedLoading.hide();
+                orphanedError.text('网络请求失败。').show();
+            }
+        });
+    });
+    // --- END: Orphaned Check Logic ---
+
     $('.table').on('click', '.edit-material-btn', function() {
         const materialId = $(this).data('material-id');
         drawerLabel.text('编辑物料');

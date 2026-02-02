@@ -233,6 +233,58 @@ function cprms_material_get_usage(PDO $pdo, array $config, array $input_data): v
     json_ok($products, '关联产品查询成功。');
 }
 
+function cprms_material_get_orphaned(PDO $pdo, array $config, array $input_data): void {
+    $sql = "
+        SELECT
+            r.material_id,
+            'kds_product_recipes' as source_table,
+            p.product_code,
+            COALESCE(t.product_name, 'Unknown') as product_name
+        FROM kds_product_recipes r
+        JOIN kds_products p ON r.product_id = p.id
+        LEFT JOIN kds_product_translations t ON p.id = t.product_id AND t.language_code = 'zh-CN'
+        LEFT JOIN kds_materials m ON r.material_id = m.id
+        WHERE (m.id IS NULL OR m.deleted_at IS NOT NULL) AND p.deleted_at IS NULL
+
+        UNION ALL
+
+        SELECT
+            a.material_id,
+            'kds_recipe_adjustments' as source_table,
+            p.product_code,
+            COALESCE(t.product_name, 'Unknown') as product_name
+        FROM kds_recipe_adjustments a
+        JOIN kds_products p ON a.product_id = p.id
+        LEFT JOIN kds_product_translations t ON p.id = t.product_id AND t.language_code = 'zh-CN'
+        LEFT JOIN kds_materials m ON a.material_id = m.id
+        WHERE (m.id IS NULL OR m.deleted_at IS NOT NULL) AND p.deleted_at IS NULL
+
+        ORDER BY material_id ASC, product_code ASC
+    ";
+
+    $stmt = $pdo->query($sql);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Group by material_id for better display
+    $grouped = [];
+    foreach ($rows as $row) {
+        $mid = $row['material_id'];
+        if (!isset($grouped[$mid])) {
+            $grouped[$mid] = [
+                'material_id' => $mid,
+                'references' => []
+            ];
+        }
+        $grouped[$mid]['references'][] = [
+            'product_code' => $row['product_code'],
+            'product_name' => $row['product_name'],
+            'source' => ($row['source_table'] === 'kds_product_recipes') ? 'Base Recipe' : 'Adjustment'
+        ];
+    }
+
+    json_ok(array_values($grouped), '缺失物料检查完成。');
+}
+
 /* [2026-01-26 后台重构] 移除总仓库存 cprms_stock_actions 函数，改用 cpsys_registry_stock.php */
 
 /* --- RMS 全局规则 (kds_global_adjustment_rules) --- */

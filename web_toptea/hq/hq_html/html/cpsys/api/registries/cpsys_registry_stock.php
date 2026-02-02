@@ -260,7 +260,7 @@ function handle_import_code_parse(PDO $pdo, array $config, array $input_data): v
 
         // 查询物料
         $stmt = $pdo->prepare("
-            SELECT m.id, m.material_code, m.base_unit_id,
+            SELECT m.id, m.material_code, m.base_unit_id, m.is_active,
                    COALESCE(mt.material_name, CONCAT('M', m.material_code)) as material_name
             FROM kds_materials m
             LEFT JOIN kds_material_translations mt ON mt.material_id = m.id AND mt.language_code = 'zh-CN'
@@ -271,6 +271,12 @@ function handle_import_code_parse(PDO $pdo, array $config, array $input_data): v
 
         if (!$material) {
             $errors[] = "第" . ($idx + 1) . "项：物料代码 {$material_code} 不存在";
+            continue;
+        }
+
+        // 验证物料是否上架 (is_active)
+        if (isset($material['is_active']) && $material['is_active'] == 0) {
+            $errors[] = "第" . ($idx + 1) . "项：物料 {$material_code} ({$material['material_name']}) 已下架，禁止入库";
             continue;
         }
 

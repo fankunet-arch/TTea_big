@@ -87,29 +87,117 @@ function cprms_material_save(PDO $pdo, array $config, array $input_data): void {
             $stmt_check->execute([$code, $id]);
             if ($stmt_check->fetch()) json_error('自定义编号 "' . htmlspecialchars($code) . '" 已被另一个有效物料使用。', 409);
 
-            $stmt = $pdo->prepare("
-                UPDATE kds_materials SET
-                    material_code = ?, material_type = ?, base_unit_id  = ?,
-                    medium_unit_id = ?, medium_conversion_rate = ?,
-                    large_unit_id  = ?, large_conversion_rate  = ?,
-                    expiry_rule_type = ?, expiry_duration = ?,
-                    image_url = ?,
-                    is_active = ?
-                WHERE id = ?
-            ");
-            $stmt->execute([
-                $code, $type, $base_unit_id,
-                $medium_unit_id, $medium_conversion_rate,
-                $large_unit_id,  $large_conversion_rate,
-                $expiry_rule_type, $expiry_duration,
-                $image_url,
-                $is_active,
-                $id
-            ]);
+            // [Fix 2026-01-27] Wrap operations in try-catch to handle missing column (Auto-Migration)
+            try {
+                if ($id) {
+                    $stmt = $pdo->prepare("
+                        UPDATE kds_materials SET
+                            material_code = ?, material_type = ?, base_unit_id  = ?,
+                            medium_unit_id = ?, medium_conversion_rate = ?,
+                            large_unit_id  = ?, large_conversion_rate  = ?,
+                            expiry_rule_type = ?, expiry_duration = ?,
+                            image_url = ?,
+                            is_active = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([
+                        $code, $type, $base_unit_id,
+                        $medium_unit_id, $medium_conversion_rate,
+                        $large_unit_id,  $large_conversion_rate,
+                        $expiry_rule_type, $expiry_duration,
+                        $image_url,
+                        $is_active,
+                        $id
+                    ]);
+                } else {
+                    // Check logic moved inside try block
+                    $stmt_active = $pdo->prepare("SELECT id FROM kds_materials WHERE material_code=? AND deleted_at IS NULL");
+                    $stmt_active->execute([$code]);
+                    if ($stmt_active->fetch()) json_error('自定义编号 "' . htmlspecialchars($code) . '" 已被一个有效物料使用。', 409);
 
-            $stmt_trans = $pdo->prepare("UPDATE kds_material_translations SET material_name=? WHERE material_id=? AND language_code=?");
-            $stmt_trans->execute([$name_zh, $id, 'zh-CN']);
-            $stmt_trans->execute([$name_es, $id, 'es-ES']);
+                    $stmt_deleted = $pdo->prepare("SELECT id FROM kds_materials WHERE material_code=? AND deleted_at IS NOT NULL");
+                    $stmt_deleted->execute([$code]);
+                    $reclaim = $stmt_deleted->fetch(PDO::FETCH_ASSOC);
+
+                    if ($reclaim) {
+                        $id = (int)$reclaim['id'];
+                        $stmt = $pdo->prepare("
+                            UPDATE kds_materials SET
+                                material_type = ?,
+                                base_unit_id  = ?,
+                                medium_unit_id = ?, medium_conversion_rate = ?,
+                                large_unit_id  = ?, large_conversion_rate  = ?,
+                                expiry_rule_type = ?, expiry_duration = ?,
+                                image_url = ?,
+                                is_active = ?,
+                                deleted_at = NULL
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([
+                            $type, $base_unit_id,
+                            $medium_unit_id, $medium_conversion_rate,
+                            $large_unit_id,  $large_conversion_rate,
+                            $expiry_rule_type, $expiry_duration,
+                            $image_url,
+                            $is_active,
+                            $id
+                        ]);
+                        $action_name = 'rms.material.restore';
+                        $msg = '已从回收状态恢复该物料。';
+                    } else {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO kds_materials
+                                (material_code, material_type, base_unit_id,
+                                 medium_unit_id, medium_conversion_rate,
+                                 large_unit_id,  large_conversion_rate,
+                                 expiry_rule_type, expiry_duration, image_url, is_active)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                        ");
+                        $stmt->execute([
+                            $code, $type, $base_unit_id,
+                            $medium_unit_id, $medium_conversion_rate,
+                            $large_unit_id,  $large_conversion_rate,
+                            $expiry_rule_type, $expiry_duration,
+                            $image_url,
+                            $is_active
+                        ]);
+                        $id = (int)$pdo->lastInsertId();
+                        $msg = '新物料已成功创建！';
+                    }
+                }
+            } catch (PDOException $e) {
+                // Check for "Column not found" error (Code 42S22 or 1054)
+                if (strpos($e->getMessage(), 'Unknown column') !== false || $e->getCode() == '42S22') {
+                    // Attempt Auto-Migration
+                    $pdo->exec("ALTER TABLE kds_materials ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER image_url");
+
+                    // Retry Operation (Recursive call or re-execution logic)
+                    // For simplicity, we just re-run the exact same block logic once
+                    if ($id) {
+                         $stmt->execute([$code, $type, $base_unit_id, $medium_unit_id, $medium_conversion_rate, $large_unit_id, $large_conversion_rate, $expiry_rule_type, $expiry_duration, $image_url, $is_active, $id]);
+                    } else {
+                        if (isset($reclaim) && $reclaim) {
+                             $stmt->execute([$type, $base_unit_id, $medium_unit_id, $medium_conversion_rate, $large_unit_id, $large_conversion_rate, $expiry_rule_type, $expiry_duration, $image_url, $is_active, $id]);
+                        } else {
+                             $stmt->execute([$code, $type, $base_unit_id, $medium_unit_id, $medium_conversion_rate, $large_unit_id, $large_conversion_rate, $expiry_rule_type, $expiry_duration, $image_url, $is_active]);
+                             $id = (int)$pdo->lastInsertId();
+                        }
+                    }
+                } else {
+                    throw $e; // Re-throw other errors
+                }
+            }
+
+            // Common Post-Op (Translations & Audit)
+            if (isset($msg) && !isset($stmt_trans)) {
+                 $stmt_trans = $pdo->prepare("INSERT INTO kds_material_translations (material_id, language_code, material_name) VALUES (?,?,?)");
+                 $stmt_trans->execute([$id, 'zh-CN', $name_zh]);
+                 $stmt_trans->execute([$id, 'es-ES', $name_es]);
+            } else {
+                 $stmt_trans = $pdo->prepare("UPDATE kds_material_translations SET material_name=? WHERE material_id=? AND language_code=?");
+                 $stmt_trans->execute([$name_zh, $id, 'zh-CN']);
+                 $stmt_trans->execute([$name_es, $id, 'es-ES']);
+            }
 
             $pdo->commit();
 
@@ -117,70 +205,7 @@ function cprms_material_save(PDO $pdo, array $config, array $input_data): void {
             $data_after = getMaterialById($pdo, $id);
             log_audit_action($pdo, $action_name, 'kds_materials', $id, $data_before, $data_after);
 
-            json_ok(['id'=>$id], '物料已成功更新！');
-        } else {
-            $stmt_active = $pdo->prepare("SELECT id FROM kds_materials WHERE material_code=? AND deleted_at IS NULL");
-            $stmt_active->execute([$code]);
-            if ($stmt_active->fetch()) json_error('自定义编号 "' . htmlspecialchars($code) . '" 已被一个有效物料使用。', 409);
-
-            $stmt_deleted = $pdo->prepare("SELECT id FROM kds_materials WHERE material_code=? AND deleted_at IS NOT NULL");
-            $stmt_deleted->execute([$code]);
-            $reclaim = $stmt_deleted->fetch(PDO::FETCH_ASSOC);
-
-            if ($reclaim) {
-                $id = (int)$reclaim['id'];
-                $stmt = $pdo->prepare("
-                    UPDATE kds_materials SET
-                        material_type = ?,
-                        base_unit_id  = ?,
-                        medium_unit_id = ?, medium_conversion_rate = ?,
-                        large_unit_id  = ?, large_conversion_rate  = ?,
-                        expiry_rule_type = ?, expiry_duration = ?,
-                        image_url = ?,
-                        is_active = ?,
-                        deleted_at = NULL
-                    WHERE id = ?
-                ");
-                $stmt->execute([
-                    $type, $base_unit_id,
-                    $medium_unit_id, $medium_conversion_rate,
-                    $large_unit_id,  $large_conversion_rate,
-                    $expiry_rule_type, $expiry_duration,
-                    $image_url,
-                    $is_active,
-                    $id
-                ]);
-                $stmt_trans = $pdo->prepare("UPDATE kds_material_translations SET material_name=? WHERE material_id=? AND language_code=?");
-                $stmt_trans->execute([$name_zh, $id, 'zh-CN']);
-                $stmt_trans->execute([$name_es, $id, 'es-ES']);
-                $msg = '已从回收状态恢复该物料。';
-                $action_name = 'rms.material.restore'; // [R2] 恢复也算一种更新
-            } else {
-                $stmt = $pdo->prepare("
-                    INSERT INTO kds_materials
-                        (material_code, material_type, base_unit_id,
-                         medium_unit_id, medium_conversion_rate,
-                         large_unit_id,  large_conversion_rate,
-                         expiry_rule_type, expiry_duration, image_url, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                ");
-                $stmt->execute([
-                    $code, $type, $base_unit_id,
-                    $medium_unit_id, $medium_conversion_rate,
-                    $large_unit_id,  $large_conversion_rate,
-                    $expiry_rule_type, $expiry_duration,
-                    $image_url,
-                    $is_active
-                ]);
-                $id = (int)$pdo->lastInsertId();
-                $stmt_trans = $pdo->prepare("INSERT INTO kds_material_translations (material_id, language_code, material_name) VALUES (?,?,?)");
-                $stmt_trans->execute([$id, 'zh-CN', $name_zh]);
-                $stmt_trans->execute([$id, 'es-ES', $name_es]);
-                $msg = '新物料已成功创建！';
-                // $action_name 默认为 'rms.material.create'
-            }
-
-            $pdo->commit();
+            json_ok(['id'=>$id], isset($msg) ? $msg : '物料已成功更新！');
 
             // [R2] 审计：写入日志
             $data_after = getMaterialById($pdo, $id);

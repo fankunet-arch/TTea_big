@@ -1,0 +1,27 @@
+# PHP Error Logs
+*.log
+php_errors*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary Files
+*.tmp
+*.bak
+*.cache
+
+# Environment Files
+.env
+.env.local
+
+# Database Dumps
+*.sql.gz
+*.sql.bak

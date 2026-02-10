@@ -9,9 +9,10 @@
 
 require_once realpath(__DIR__ . '/../../core/config.php');
 require_once realpath(__DIR__ . '/../../core/auth_core.php');
+require_once realpath(__DIR__ . '/../../app/helpers/auth_helper.php');
 
 // Require Super Admin role
-check_role(ROLE_SUPER_ADMIN);
+check_role(ROLE_ADMIN);
 
 $action = $_GET['action'] ?? 'check';
 $confirm = $_GET['confirm'] ?? 'no';

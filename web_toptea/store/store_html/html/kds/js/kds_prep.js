@@ -85,8 +85,10 @@ async function performPrepAction(buttonElement) {
         }
     } catch (error) {
         console.error('Failed to record expiry:', error);
-        // (使用自定义 Alert)
-        showKdsAlert(`${translations.action_failed}: ${error.message}`, true);
+        // [DEBUG 2026-02-10] 显示详细错误信息
+        let errorMsg = `${translations.action_failed}: ${error.message}`;
+        console.error('Error details:', error);
+        showKdsAlert(errorMsg, true);
     } finally {
         buttonElement.disabled = false;
         buttonElement.innerHTML = originalText;

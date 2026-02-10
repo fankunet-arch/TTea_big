@@ -45,8 +45,15 @@ function handle_print_get_templates(PDO $pdo, array $config, array $input_data):
     foreach ($results as $row) {
         $code = $row['template_code'];
         if (!isset($templates[$code])) {
+            $tpl_content = json_decode($row['template_content'], true);
+
+            // [FIX 2026-02-10] 提取 commands 数组
+            // DB存储格式: {"commands": [...], "copies": 1}
+            // JS期待格式: {content: [...], size: "WxH"}
+            $commands = $tpl_content['commands'] ?? $tpl_content;
+
             $templates[$code] = [
-                'content' => json_decode($row['template_content'], true),
+                'content' => $commands,  // 直接是commands数组
                 'size' => $row['paper_width'] . 'x' . $row['paper_height']
             ];
         }

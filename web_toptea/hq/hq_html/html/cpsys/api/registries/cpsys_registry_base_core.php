@@ -338,6 +338,12 @@ function handle_store_save(PDO $pdo, array $config, array $input_data): void {
         }
     } catch (Throwable $e) {
         $pdo->rollBack();
+
+        // [DEBUG 2026-02-10] 记录详细错误信息
+        error_log("Store Save Error: " . $e->getMessage());
+        error_log("Store Save SQL State: " . ($e instanceof PDOException ? $e->errorInfo[0] : 'N/A'));
+        error_log("Store Save Error Code: " . ($e instanceof PDOException ? $e->errorInfo[1] : $e->getCode()));
+
         // [MODIFIED 1.3] 捕获唯一键冲突
         if ($e instanceof PDOException && $e->errorInfo[1] == 1062) {
              if (strpos($e->getMessage(), 'uniq_invoice_prefix') !== false) {
@@ -347,7 +353,21 @@ function handle_store_save(PDO $pdo, array $config, array $input_data): void {
                  json_error('门店编码 "' . htmlspecialchars($store_code) . '" 已被占用。', 409);
              }
         }
-        json_error('数据库错误（stores）', 500, ['debug' => $e->getMessage()]);
+
+        // [DEBUG 2026-02-10] 提供更详细的错误信息
+        $debug_info = [
+            'error_message' => $e->getMessage(),
+            'error_code' => $e->getCode(),
+            'error_file' => $e->getFile() . ':' . $e->getLine()
+        ];
+
+        if ($e instanceof PDOException) {
+            $debug_info['sql_state'] = $e->errorInfo[0];
+            $debug_info['driver_code'] = $e->errorInfo[1];
+            $debug_info['driver_message'] = $e->errorInfo[2];
+        }
+
+        json_error('数据库错误（stores）', 500, ['debug' => $e->getMessage(), 'details' => $debug_info]);
     }
 }
 

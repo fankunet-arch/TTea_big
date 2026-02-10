@@ -198,7 +198,12 @@ $(document).ready(function() {
             },
             error: function(jqXHR) {
                 if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                    alert('操作失败: ' + jqXHR.responseJSON.message);
+                    let errorMsg = '操作失败: ' + jqXHR.responseJSON.message;
+                    // [DEBUG] 显示详细的数据库错误信息
+                    if (jqXHR.responseJSON.data && jqXHR.responseJSON.data.debug) {
+                        errorMsg += '\n\n详细错误:\n' + jqXHR.responseJSON.data.debug;
+                    }
+                    alert(errorMsg);
                 } else {
                     alert('保存过程中发生网络或服务器错误。');
                 }

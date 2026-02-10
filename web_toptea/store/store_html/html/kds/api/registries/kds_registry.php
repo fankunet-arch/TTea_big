@@ -224,7 +224,7 @@ function handle_kds_expiry_record(PDO $pdo, array $config, array $input_data): v
         'operator_name' => $operator_name
     ];
 
-    json_ok('效期记录已生成。', ['print_data' => $print_data]);
+    json_ok(['print_data' => $print_data], '效期记录已生成。');
 }
 
 /* -------------------------------------------------------------------------- */

@@ -168,7 +168,7 @@ try {
                         </div>
                         <div class="card-body">
                             <table class="table table-sm">
-                                <thead><tr><th>步骤</th><th>物料</th><th>用量</th><th>单位</th><th></th></tr></thead>
+                                <thead><tr><th>步骤</th><th>物料</th><th>计量</th><th>用量</th><th>单位</th><th></th></tr></thead>
                                 <tbody id="base-recipe-body"></tbody>
                             </table>
                         </div>
@@ -208,8 +208,20 @@ try {
                         <?php endforeach; ?>
                     </select>
                 </td>
-                <td><input type="number" class="form-control form-control-sm quantity-input" placeholder="用量"></td>
                 <td>
+                    <select class="form-select form-select-sm measurement-type-select">
+                        <option value="STANDARD">标准</option>
+                        <option value="FILL_LINE">至杯线</option>
+                    </select>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="fill-line-prefix text-nowrap" style="display:none;">至</span>
+                        <input type="number" class="form-control form-control-sm quantity-input" placeholder="用量" step="0.01">
+                        <span class="fill-line-suffix text-nowrap" style="display:none;">线</span>
+                    </div>
+                </td>
+                <td class="unit-cell">
                     <select class="form-select form-select-sm unit-select">
                          <option value="">-- 单位 --</option>
                         <?php foreach($unit_options as $u): ?>
@@ -274,10 +286,11 @@ try {
             <table class="table table-sm table-borderless">
                 <thead>
                     <tr>
-                        <th style="width: 25%;">步骤</th>
-                        <th style="width: 35%;">物料</th>
+                        <th style="width: 20%;">步骤</th>
+                        <th style="width: 25%;">物料</th>
+                        <th style="width: 15%;">计量</th>
                         <th style="width: 15%;">用量</th>
-                        <th style="width: 20%;">单位</th>
+                        <th style="width: 15%;">单位</th>
                         <th style="width: 5%;"></th>
                     </tr>
                 </thead>

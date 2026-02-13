@@ -92,6 +92,8 @@ $(function () {
       step_base: "底料",
       step_mixing: "调杯",
       step_topping: "顶料",
+      fill_line_prefix: "至",
+      fill_line_suffix: "线",
     },
     'es-ES': {
       err: "Error del servidor",
@@ -111,6 +113,8 @@ $(function () {
       step_base: "Base",
       step_mixing: "Mezcla",
       step_topping: "Toppings",
+      fill_line_prefix: "Línea ",
+      fill_line_suffix: "",
     },
   };
 
@@ -466,19 +470,28 @@ $(function () {
     return "base";
   }
 
-  function cardHTML(i, name, qty, unit, imgUrl) {
+  function cardHTML(i, name, qty, unit, imgUrl, measurementType) {
     // [V3 修复]
     // 1. 栅格: col-xxl-6 col-xl-6 ... -> col-4 (强制3列)
     // 2. [圆角修复] 移除了 kds-card-thumb 上的内联 style
     // 3. 标题: font-size:1.6rem -> font-size:1.25rem
     // 4. 数量/单位字体大小在 kds_style.css 中修改
-    
+
     // [GEMINI SECURE IMAGE PROXY FIX (V1.1)]
-    // 检查 imgUrl 是否存在且不为空，如果存在，则构建指向 PHP 代理的 src
     const imgTag = (imgUrl && imgUrl.trim() !== '')
-        ? `<img src="api/get_image.php?file=${esc(imgUrl)}" alt="${esc(name)}">` 
-        : ''; // 如果 imgUrl 为空或 null，则不生成 <img> 标签
-        
+        ? `<img src="api/get_image.php?file=${esc(imgUrl)}" alt="${esc(name)}">`
+        : '';
+
+    // 根据 measurement_type 决定显示格式
+    let measurementHtml;
+    if (measurementType === 'FILL_LINE') {
+      // 至杯线模式: "至550线" / "Línea 550"
+      measurementHtml = `<span class="kds-quantity">${esc(t('fill_line_prefix'))}${esc(qty)}${esc(t('fill_line_suffix'))}</span>`;
+    } else {
+      // 标准模式: "50 克" / "50 g"
+      measurementHtml = `<span class="kds-quantity">${esc(qty)}</span><span class="kds-unit-measure">${esc(unit)}</span>`;
+    }
+
     return `
       <div class="col-4">
         <div class="kds-ingredient-card">
@@ -488,8 +501,7 @@ $(function () {
             name
           )}</div>
           <div class="kds-measurement text-center">
-            <span class="kds-quantity">${esc(qty)}</span>
-            <span class="kds-unit-measure">${esc(unit)}</span>
+            ${measurementHtml}
           </div>
         </div>
       </div>`;
@@ -540,7 +552,7 @@ $(function () {
         ? r.unit_es || r.unit_zh || ""
         : r.unit_zh || r.unit_es || "";
       const qty = r.quantity != null ? r.quantity : "";
-      $wrapBase.append(cardHTML(i++, name, String(qty), unit, r.image_url)); // [KDS Image] Added r.image_url
+      $wrapBase.append(cardHTML(i++, name, String(qty), unit, r.image_url, r.measurement_type));
     });
 
     i = 1;
@@ -552,7 +564,7 @@ $(function () {
         ? r.unit_es || r.unit_zh || ""
         : r.unit_zh || r.unit_es || "";
       const qty = r.quantity != null ? r.quantity : "";
-      $wrapMix.append(cardHTML(i++, name, String(qty), unit, r.image_url)); // [KDS Image] Added r.image_url
+      $wrapMix.append(cardHTML(i++, name, String(qty), unit, r.image_url, r.measurement_type));
     });
 
     i = 1;
@@ -564,7 +576,7 @@ $(function () {
         ? r.unit_es || r.unit_zh || ""
         : r.unit_zh || r.unit_es || "";
       const qty = r.quantity != null ? r.quantity : "";
-      $wrapTop.append(cardHTML(i++, name, String(qty), unit, r.image_url)); // [KDS Image] Added r.image_url
+      $wrapTop.append(cardHTML(i++, name, String(qty), unit, r.image_url, r.measurement_type));
     });
 
     // [V6 修复] 如果某个分组没有内容，则显示“等待查询”（或“无内容”）

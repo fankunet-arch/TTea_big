@@ -127,18 +127,21 @@ function handle_kds_sop_get(PDO $pdo, array $config, array $input_data): void {
 
     $final_recipe = [];
     foreach ($recipe_map as $item) {
-        if ($item['quantity'] <= 0) continue; 
+        if ($item['quantity'] <= 0) continue;
         // 依赖: m_details, u_name, norm_cat (来自 kds_repo.php)
         $m_details = m_details($pdo, (int)$item['material_id']);
-        $u_names = u_name($pdo, (int)$item['unit_id']);
+        $mtype = $item['measurement_type'] ?? 'STANDARD';
+        $uid = (int)($item['unit_id'] ?? 0);
+        $u_names = ($mtype === 'STANDARD' && $uid > 0) ? u_name($pdo, $uid) : ['zh' => '', 'es' => ''];
         $final_recipe[] = [
-            'material_zh'   => $m_details['zh'],
-            'material_es'   => $m_details['es'],
-            'image_url'     => $m_details['image_url'],
-            'unit_zh'       => $u_names['zh'],
-            'unit_es'       => $u_names['es'],
-            'quantity'      => (float)$item['quantity'],
-            'step_category' => norm_cat((string)$item['step_category'])
+            'material_zh'      => $m_details['zh'],
+            'material_es'      => $m_details['es'],
+            'image_url'        => $m_details['image_url'],
+            'unit_zh'          => $u_names['zh'],
+            'unit_es'          => $u_names['es'],
+            'quantity'         => (float)$item['quantity'],
+            'measurement_type' => $mtype,
+            'step_category'    => norm_cat((string)$item['step_category'])
         ];
     }
     

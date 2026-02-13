@@ -372,7 +372,7 @@ function cprms_product_get_details(PDO $pdo, array $config, array $input_data): 
     if (!$base) json_error('未找到产品。', 404);
 
     $stmt = $pdo->prepare("
-        SELECT id, material_id, unit_id, quantity, step_category, sort_order
+        SELECT id, material_id, unit_id, quantity, measurement_type, step_category, sort_order
         FROM kds_product_recipes
         WHERE product_id=?
         ORDER BY sort_order ASC, id ASC
@@ -381,7 +381,7 @@ function cprms_product_get_details(PDO $pdo, array $config, array $input_data): 
     $base_recipes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt = $pdo->prepare("
-        SELECT id, material_id, unit_id, quantity, step_category,
+        SELECT id, material_id, unit_id, quantity, measurement_type, step_category,
                cup_id, sweetness_option_id, ice_option_id
         FROM kds_recipe_adjustments
         WHERE product_id=?
@@ -402,10 +402,11 @@ function cprms_product_get_details(PDO $pdo, array $config, array $input_data): 
             ];
         }
         $grouped[$key]['overrides'][] = [
-            'material_id'   => (int)$row['material_id'],
-            'quantity'      => (float)$row['quantity'],
-            'unit_id'       => (int)$row['unit_id'],
-            'step_category' => $row['step_category'] ?? 'base',
+            'material_id'      => (int)$row['material_id'],
+            'quantity'         => (float)$row['quantity'],
+            'measurement_type' => $row['measurement_type'] ?? 'STANDARD',
+            'unit_id'          => $row['unit_id'] !== null ? (int)$row['unit_id'] : null,
+            'step_category'    => $row['step_category'] ?? 'base',
         ];
     }
     $adjustments = array_values($grouped);
@@ -536,14 +537,17 @@ function cprms_product_save(PDO $pdo, array $config, array $input_data): void {
         $base = $product['base_recipes'] ?? [];
         $pdo->prepare("DELETE FROM kds_product_recipes WHERE product_id=?")->execute([$productId]);
         if ($base) {
-            $ins = $pdo->prepare("INSERT INTO kds_product_recipes (product_id, material_id, unit_id, quantity, step_category, sort_order) VALUES (?, ?, ?, ?, ?, ?)");
+            $ins = $pdo->prepare("INSERT INTO kds_product_recipes (product_id, material_id, unit_id, quantity, measurement_type, step_category, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $sort = 1;
             foreach ($base as $row) {
+                $mtype = (string)($row['measurement_type'] ?? 'STANDARD');
+                $unit_id = ($mtype === 'FILL_LINE') ? null : (int)($row['unit_id'] ?? 0);
                 $ins->execute([
                     $productId,
                     (int)($row['material_id'] ?? 0),
-                    (int)($row['unit_id'] ?? 0),
+                    $unit_id,
                     (float)($row['quantity'] ?? 0),
+                    $mtype,
                     (string)($row['step_category'] ?? 'base'),
                     $sort++
                 ]);
@@ -553,13 +557,16 @@ function cprms_product_save(PDO $pdo, array $config, array $input_data): void {
         $adjInput = $product['adjustments'] ?? [];
         $pdo->prepare("DELETE FROM kds_recipe_adjustments WHERE product_id=?")->execute([$productId]);
         if ($adjInput) {
-            $ins = $pdo->prepare("INSERT INTO kds_recipe_adjustments (product_id, material_id, unit_id, quantity, step_category, cup_id, sweetness_option_id, ice_option_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $ins = $pdo->prepare("INSERT INTO kds_recipe_adjustments (product_id, material_id, unit_id, quantity, measurement_type, step_category, cup_id, sweetness_option_id, ice_option_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($adjInput as $ov) {
+                $mtype = (string)($ov['measurement_type'] ?? 'STANDARD');
+                $unit_id = ($mtype === 'FILL_LINE') ? null : (int)($ov['unit_id'] ?? 0);
                 $ins->execute([
                     $productId,
                     (int)($ov['material_id'] ?? 0),
-                    (int)($ov['unit_id'] ?? 0),
+                    $unit_id,
                     (float)($ov['quantity'] ?? 0),
+                    $mtype,
                     (string)($ov['step_category'] ?? 'base'),
                     isset($ov['cup_id']) ? (int)$ov['cup_id'] : null,
                     isset($ov['sweetness_option_id']) ? (int)$ov['sweetness_option_id'] : null,

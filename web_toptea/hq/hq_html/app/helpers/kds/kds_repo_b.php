@@ -125,7 +125,7 @@ if (!function_exists('getRecipeByProductCode')) {
 
         // 2. 获取 L1 基础配方
         $stmt_l1 = $pdo->prepare("
-            SELECT id, material_id, unit_id, quantity, step_category, sort_order
+            SELECT id, material_id, unit_id, quantity, measurement_type, step_category, sort_order
             FROM kds_product_recipes
             WHERE product_id=?
             ORDER BY sort_order ASC, id ASC
@@ -135,7 +135,7 @@ if (!function_exists('getRecipeByProductCode')) {
 
         // 3. 获取 L3 特例规则
         $stmt_l3 = $pdo->prepare("
-            SELECT id, material_id, unit_id, quantity, step_category,
+            SELECT id, material_id, unit_id, quantity, measurement_type, step_category,
                    cup_id, sweetness_option_id, ice_option_id
             FROM kds_recipe_adjustments
             WHERE product_id=?
@@ -157,10 +157,11 @@ if (!function_exists('getRecipeByProductCode')) {
                 ];
             }
             $grouped[$key]['overrides'][] = [
-                'material_id'   => (int)$row['material_id'],
-                'quantity'      => (float)$row['quantity'],
-                'unit_id'       => (int)$row['unit_id'],
-                'step_category' => $row['step_category'] ?? 'base',
+                'material_id'      => (int)$row['material_id'],
+                'quantity'         => (float)$row['quantity'],
+                'measurement_type' => $row['measurement_type'] ?? 'STANDARD',
+                'unit_id'          => $row['unit_id'] !== null ? (int)$row['unit_id'] : null,
+                'step_category'    => $row['step_category'] ?? 'base',
             ];
         }
         $adjustments = array_values($grouped);

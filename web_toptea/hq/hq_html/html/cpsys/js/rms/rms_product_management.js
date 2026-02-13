@@ -79,6 +79,23 @@ $(document).ready(function() {
         addRecipeRow(targetBody);
     });
     editorContainer.on('click', '.btn-remove-row', function() { $(this).closest('tr').remove(); });
+
+    // --- Measurement Type Toggle Handler ---
+    editorContainer.on('change', '.measurement-type-select', function() {
+        const $row = $(this).closest('tr');
+        const isFillLine = $(this).val() === 'FILL_LINE';
+        if (isFillLine) {
+            $row.find('.fill-line-prefix').show();
+            $row.find('.fill-line-suffix').show();
+            $row.find('.quantity-input').attr('placeholder', '线值').attr('step', '1');
+            $row.find('.unit-cell .unit-select').prop('disabled', true).css('opacity', '0.4');
+        } else {
+            $row.find('.fill-line-prefix').hide();
+            $row.find('.fill-line-suffix').hide();
+            $row.find('.quantity-input').attr('placeholder', '用量').attr('step', '0.01');
+            $row.find('.unit-cell .unit-select').prop('disabled', false).css('opacity', '1');
+        }
+    });
     
     // --- PAMT Code Generation Handlers ---
     editorContainer.on('change', '.cup-condition, .sweetness-condition, .ice-condition', function() {
@@ -251,7 +268,7 @@ function updatePamtCodeDisplay($ruleCard) {
             if(data.base_recipes && data.base_recipes.length > 0){
                 data.base_recipes.forEach(recipe => addRecipeRow(baseRecipeBody, recipe));
             } else {
-                baseRecipeBody.html('<tr><td colspan="5" class="text-center text-muted">暂无基础配方步骤。</td></tr>');
+                baseRecipeBody.html('<tr><td colspan="6" class="text-center text-muted">暂无基础配方步骤。</td></tr>');
             }
             
             // 4. Populate Overrides (L3)
@@ -276,7 +293,15 @@ function updatePamtCodeDisplay($ruleCard) {
             }
             $newRow.find('.material-select').val(data.material_id);
             $newRow.find('.quantity-input').val(data.quantity);
-            $newRow.find('.unit-select').val(data.unit_id);
+            if (data.measurement_type === 'FILL_LINE') {
+                $newRow.find('.measurement-type-select').val('FILL_LINE');
+                $newRow.find('.fill-line-prefix').show();
+                $newRow.find('.fill-line-suffix').show();
+                $newRow.find('.quantity-input').attr('placeholder', '线值').attr('step', '1');
+                $newRow.find('.unit-cell .unit-select').prop('disabled', true).css('opacity', '0.4');
+            } else {
+                $newRow.find('.unit-select').val(data.unit_id);
+            }
         }
         $(targetBody).append($newRow);
     }
@@ -322,6 +347,7 @@ function updatePamtCodeDisplay($ruleCard) {
             productData.base_recipes.push({
                 step_category: row.find('.step-category-select').val(),
                 material_id: row.find('.material-select').val(),
+                measurement_type: row.find('.measurement-type-select').val() || 'STANDARD',
                 quantity: row.find('.quantity-input').val(),
                 unit_id: row.find('.unit-select').val(),
                 sort_order: index
@@ -343,6 +369,7 @@ function updatePamtCodeDisplay($ruleCard) {
                     ice_option_id: ice_option_id,
                     step_category: row.find('.step-category-select').val(),
                     material_id: row.find('.material-select').val(),
+                    measurement_type: row.find('.measurement-type-select').val() || 'STANDARD',
                     quantity: row.find('.quantity-input').val(),
                     unit_id: row.find('.unit-select').val()
                 });

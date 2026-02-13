@@ -328,7 +328,7 @@ if (!function_exists('check_gating')) {
 }
 if (!function_exists('get_base_recipe')) {
     function get_base_recipe(PDO $pdo, int $pid): array {
-        $st = $pdo->prepare("SELECT material_id, quantity, unit_id, step_category, sort_order FROM kds_product_recipes WHERE product_id = ? ORDER BY sort_order ASC, id ASC");
+        $st = $pdo->prepare("SELECT material_id, quantity, measurement_type, unit_id, step_category, sort_order FROM kds_product_recipes WHERE product_id = ? ORDER BY sort_order ASC, id ASC");
         $st->execute([$pid]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         $recipe_map = [];
@@ -336,7 +336,8 @@ if (!function_exists('get_base_recipe')) {
             $recipe_map[(int)$row['material_id']] = [
                 'material_id' => (int)$row['material_id'],
                 'quantity' => (float)$row['quantity'],
-                'unit_id' => (int)$row['unit_id'],
+                'measurement_type' => $row['measurement_type'] ?? 'STANDARD',
+                'unit_id' => $row['unit_id'] !== null ? (int)$row['unit_id'] : 0,
                 'step_category' => norm_cat((string)$row['step_category']),
                 'sort_order' => (int)$row['sort_order'],
                 'source' => 'L1'
@@ -363,11 +364,15 @@ if (!function_exists('apply_global_rules')) {
             if (!isset($recipe[$target_mid]) && $rule['action_type'] !== 'ADD_MATERIAL') {
                  continue;
             }
+            // L2 全局规则不修改 FILL_LINE 类型的物料（数学运算对线值无意义）
+            if (isset($recipe[$target_mid]) && ($recipe[$target_mid]['measurement_type'] ?? 'STANDARD') === 'FILL_LINE') {
+                continue;
+            }
             $cond_base_gt = $rule['cond_base_gt'];
             $cond_base_lte = $rule['cond_base_lte'];
             if ($cond_base_gt !== null || $cond_base_lte !== null) {
                 if (!isset($recipe[$target_mid])) {
-                    continue; 
+                    continue;
                 }
                 $base_quantity = (float)$recipe[$target_mid]['quantity'];
                 if ($cond_base_gt !== null && !($base_quantity > (float)$cond_base_gt)) {
@@ -388,6 +393,7 @@ if (!function_exists('apply_global_rules')) {
                         $recipe[$target_mid] = [
                             'material_id' => $target_mid,
                             'quantity' => $value,
+                            'measurement_type' => 'STANDARD',
                             'unit_id' => (int)$rule['action_unit_id'],
                             'step_category' => 'mixing',
                             'sort_order' => 500 + $target_mid,
@@ -418,16 +424,15 @@ if (!function_exists('apply_overrides')) {
         foreach ($all_mids_to_check as $mid) {
             $mid = (int)$mid;
             $adj = best_adjust_l3($pdo, $pid, $mid, $cup, $ice, $sweet);
-            
+
             if ($adj) {
                 $recipe[$mid] = [
                     'material_id' => $mid,
                     'quantity' => (float)$adj['quantity'],
-                    'unit_id' => (int)$adj['unit_id'],
+                    'measurement_type' => $adj['measurement_type'] ?? 'STANDARD',
+                    'unit_id' => $adj['unit_id'] !== null ? (int)$adj['unit_id'] : 0,
                     'step_category' => norm_cat((string)$adj['step_category']),
                     // [GEMINI SUPER-ENGINEER FIX (Error 3)]
-                    // 修复了致命错误：当 $recipe[$mid] 为 null 时 (L3 新增物料)，访问 $recipe[$mid]['sort_order'] 会失败。
-                    // 使用 ($recipe[$mid] ?? [])['sort_order'] ?? (600 + $mid) 来安全访问。
                     'sort_order' => ($recipe[$mid] ?? [])['sort_order'] ?? (600 + $mid),
                     'source' => 'L3-OVERRIDE'
                 ];
@@ -443,7 +448,7 @@ if (!function_exists('best_adjust_l3')) {
         if ($ice !== null) { $cond[] = "(ice_option_id IS NULL OR ice_option_id=?)"; $args[] = $ice; $score[] = "(ice_option_id IS NOT NULL)"; } else { $cond[] = "(ice_option_id IS NULL)"; }
         if ($sweet !== null) { $cond[] = "(sweetness_option_id IS NULL OR sweetness_option_id=?)"; $args[] = $sweet; $score[] = "(sweetness_option_id IS NOT NULL)"; } else { $cond[] = "(sweetness_option_id IS NULL)"; }
         $scoreExpr = $score ? implode(' + ', $score) : '0';
-        $sql = "SELECT material_id, quantity, unit_id, step_category FROM kds_recipe_adjustments
+        $sql = "SELECT material_id, quantity, measurement_type, unit_id, step_category FROM kds_recipe_adjustments
                 WHERE " . implode(' AND ', $cond) . " ORDER BY {$scoreExpr} DESC, id DESC LIMIT 1";
         $st = $pdo->prepare($sql); $st->execute($args); $r = $st->fetch(PDO::FETCH_ASSOC); return $r ?: null;
     }
@@ -491,27 +496,29 @@ if (!function_exists('get_available_options')) {
 if (!function_exists('get_base_recipe_bilingual')) {
     function get_base_recipe_bilingual(PDO $pdo, int $pid): array {
         $st = $pdo->prepare("
-            SELECT r.material_id, r.quantity, r.unit_id, r.step_category
+            SELECT r.material_id, r.quantity, r.measurement_type, r.unit_id, r.step_category
             FROM kds_product_recipes r
             WHERE r.product_id = ? ORDER BY r.sort_order ASC, r.id ASC
         ");
         $st->execute([$pid]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-        
+
         $recipe = [];
         foreach ($rows as $row) {
             $m_details = m_details($pdo, (int)$row['material_id']);
-            $u_names = u_name($pdo, (int)$row['unit_id']);
+            $uid = $row['unit_id'] !== null ? (int)$row['unit_id'] : 0;
+            $u_names = $uid > 0 ? u_name($pdo, $uid) : ['zh' => '', 'es' => ''];
             $recipe[] = [
-                'material_id'   => (int)$row['material_id'],
-                'material_zh' => $m_details['zh'],
-                'material_es' => $m_details['es'],
-                'image_url'   => $m_details['image_url'],
-                'quantity'      => (float)$row['quantity'],
-                'unit_id'       => (int)$row['unit_id'],
-                'unit_zh'       => $u_names['zh'],
-                'unit_es'       => $u_names['es'],
-                'step_category' => norm_cat((string)$row['step_category'])
+                'material_id'      => (int)$row['material_id'],
+                'material_zh'      => $m_details['zh'],
+                'material_es'      => $m_details['es'],
+                'image_url'        => $m_details['image_url'],
+                'quantity'         => (float)$row['quantity'],
+                'measurement_type' => $row['measurement_type'] ?? 'STANDARD',
+                'unit_id'          => $uid,
+                'unit_zh'          => $u_names['zh'],
+                'unit_es'          => $u_names['es'],
+                'step_category'    => norm_cat((string)$row['step_category'])
             ];
         }
         return $recipe;
